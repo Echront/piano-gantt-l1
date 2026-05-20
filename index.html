@@ -56,6 +56,8 @@ header .subtitle { font-size: 12px; color: var(--text-2); margin-top: 2px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
 .dot.saving { background: var(--warning); }
 .dot.error { background: var(--danger); }
+.dot.warn { background: #1f6feb; animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 12px; }
 .kpi { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
 .kpi-grid { display: grid; grid-template-columns: repeat(3, minmax(280px, 1fr)); gap: 12px; margin-bottom: 12px; }
@@ -306,10 +308,10 @@ td.st-blocked { background: #fde5e7 !important; }
     <h2>Configurazione sincronizzazione</h2>
     <p>Il tool è già configurato per puntare al bin condiviso del team. Normalmente non serve modificare nulla qui.</p>
     <div class="help-box">
-      <strong>Sync attiva:</strong> i dati vengono salvati automaticamente nel bin JSONBin del team. Le modifiche sono visibili agli altri utenti entro l'intervallo di polling impostato sotto.
+      <strong>Sync attiva:</strong> i dati vengono salvati automaticamente nel bin condiviso del team. Le modifiche sono visibili agli altri utenti dopo aver premuto il pulsante ⟳ Ricarica.
     </div>
     <label>URL Endpoint sync (avanzato — modificare solo se richiesto)</label>
-    <input type="url" id="cfg-url" placeholder="https://api.jsonbin.io/v3/b/XXXXX" />
+    <input type="url" id="cfg-url" placeholder="https://api.npoint.io/XXXXX" />
     <label>Header autenticazione aggiuntivi (opzionale, raro)</label>
     <input type="text" id="cfg-auth" placeholder="lascia vuoto a meno di indicazioni specifiche" />
     <label>Intervallo polling (secondi, 0 = disabilitato)</label>
@@ -364,15 +366,12 @@ const NOTE_MAX_WORDS = 100;
 const STORAGE_KEY = "gantt_l1_2026_data_v3";
 const CONFIG_KEY = "gantt_l1_2026_config";
 
-// Configurazione preimpostata: URL del bin condiviso del team + Access Keys con scope su questo singolo bin.
-// La chiave "read" è usata per le GET, la chiave "write" per PUT/DELETE.
-// Anche se l'URL del tool venisse condiviso oltre il team previsto, le chiavi danno accesso solo a questo bin,
-// non a tutto l'account JSONBin (la X-Master-Key non è hardcoded).
+// Configurazione preimpostata: bin npoint.io condiviso del team.
+// npoint.io non richiede autenticazione: chi conosce l'URL può leggere e scrivere.
+// Sufficiente per un team interno fidato.
 const DEFAULT_CONFIG = {
-  url: "https://api.jsonbin.io/v3/b/6a0dc36a6610dd3ae877dbd8",
-  readKey: "$2a$10$apeOaRtjXmfCmVh1jIRCeuCQhazoZRI4TCLcc6XKvspqtFYYpl19W",
-  writeKey: "$2a$10$DeCSIv6wr4E7zIEot8GSv.n0B1A8aoCsj9lKo9cm.GWlHMbqZnXTa",
-  auth: "", // header custom opzionale aggiuntivo (raro)
+  url: "https://api.npoint.io/2d44df43f6ca7d22d2dc",
+  auth: "", // header custom opzionale (non serve per npoint)
   poll: 30
 };
 
@@ -403,9 +402,10 @@ function markDirty(kind, id) { dirtyKeys.add(kind + ":" + id); }
 function setStatus(text, kind) {
   document.getElementById("status-text").textContent = text;
   const dot = document.getElementById("status-dot");
-  dot.classList.remove("saving","error");
+  dot.classList.remove("saving","error","warn");
   if (kind === "saving") dot.classList.add("saving");
   if (kind === "error") dot.classList.add("error");
+  if (kind === "warn") dot.classList.add("warn");
 }
 
 function loadConfig() {
@@ -414,10 +414,9 @@ function loadConfig() {
     if (raw) {
       const stored = JSON.parse(raw);
       config = Object.assign({}, DEFAULT_CONFIG, stored);
-      // Le chiavi di accesso sono hardcoded: anche se localStorage contiene una vecchia versione
-      // senza readKey/writeKey, ripristina sempre i valori default.
-      config.readKey = DEFAULT_CONFIG.readKey;
-      config.writeKey = DEFAULT_CONFIG.writeKey;
+      // Rimuovi chiavi residue da configurazioni vecchie (JSONBin)
+      delete config.readKey;
+      delete config.writeKey;
       if (!config.url) config.url = DEFAULT_CONFIG.url;
     }
   } catch(e) {}
@@ -427,9 +426,6 @@ function saveConfig() {
   config.auth = document.getElementById("cfg-auth").value.trim();
   config.poll = parseInt(document.getElementById("cfg-poll").value, 10);
   if (isNaN(config.poll)) config.poll = 30;
-  // Le chiavi restano quelle hardcoded, non modificabili da UI
-  config.readKey = DEFAULT_CONFIG.readKey;
-  config.writeKey = DEFAULT_CONFIG.writeKey;
   localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
   closeConfig();
   setupPolling();
@@ -445,21 +441,7 @@ function closeConfig() { document.getElementById("modal-config").classList.remov
 
 function buildHeaders(method) {
   const h = {"Content-Type": "application/json"};
-  const isJsonBin = /jsonbin\.io/i.test(config.url || "");
-  if (isJsonBin) {
-    // Disable JSONBin per-request versioning so GET always returns the latest write
-    h["X-Bin-Versioning"] = "false";
-    // Use appropriate Access Key based on HTTP method
-    // GET → readKey (read-only), PUT/DELETE → writeKey (read+write)
-    if (method === "GET" && config.readKey) {
-      h["X-Access-Key"] = config.readKey;
-    } else if ((method === "PUT" || method === "DELETE") && config.writeKey) {
-      h["X-Access-Key"] = config.writeKey;
-    } else if (config.writeKey) {
-      h["X-Access-Key"] = config.writeKey; // fallback
-    }
-  }
-  // Custom auth header(s) opzionali aggiuntivi
+  // Header autenticazione custom opzionali (raro, npoint.io non li richiede)
   if (config.auth) {
     const lines = config.auth.split(/\r?\n|;/);
     for (const line of lines) {
@@ -523,14 +505,12 @@ function mergePreservingDirty(remote, local, dirty) {
 async function loadData(opts) {
   const isPolling = !!(opts && opts.polling);
   // Race protection: never overwrite local state with remote if we just saved
-  // (the GET could return a stale version due to JSONBin eventual consistency).
   if (isPolling && (saveInProgress || (Date.now() - lastSaveAt < SAVE_GRACE_MS))) {
-    return; // skip this polling cycle
+    return;
   }
   if (!isPolling) setStatus("Caricamento...", "saving");
   if (config.url) {
     try {
-      // Reduce JSONBin CDN cache by appending a cache-buster
       const sep = config.url.includes("?") ? "&" : "?";
       const url = config.url + sep + "_=" + Date.now();
       const res = await fetch(url, { headers: buildHeaders("GET"), cache: "no-store" });
@@ -539,11 +519,23 @@ async function loadData(opts) {
         let payload = json;
         if (payload && typeof payload === "object" && payload.record) payload = payload.record;
         const remote = normalizePayload(payload);
-        // Final guard: if a save started while this GET was in-flight, discard the GET
         if (saveInProgress || (Date.now() - lastSaveAt < SAVE_GRACE_MS)) {
           return;
         }
-        // Merge remote with local, preserving any locally-dirty keys until the server confirms them
+        if (isPolling) {
+          // Polling NON sovrascrive mai. Confronta solo per accorgersi se ci sono modifiche
+          // remote diverse dai dati locali (es. fatte da altri utenti). In quel caso mostra
+          // un avviso, ma l'utente decide quando ricaricare con il pulsante "⟳ Ricarica".
+          const localJson = JSON.stringify(data);
+          const remoteJson = JSON.stringify(remote);
+          if (localJson !== remoteJson) {
+            setStatus("Modifiche remote disponibili — premi ⟳ Ricarica", "warn");
+          } else {
+            setStatus("Sincronizzato (remoto)", null);
+          }
+          return;
+        }
+        // Caricamento manuale (init o pulsante Ricarica): sovrascrive con merge dirty
         data = mergePreservingDirty(remote, data, dirtyKeys);
         setStatus("Sincronizzato (remoto)", null);
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
