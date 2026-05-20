@@ -224,7 +224,7 @@ td.st-blocked { background: #fde5e7 !important; }
     <h1>Piano Gantt L1 2026</h1>
     <div class="subtitle">Tool collaborativo per gestione date di consegna per fase</div>
   </div>
-  <button onclick="openConfig()" style="height:34px;padding:0 14px;font-size:13px;cursor:pointer;border:1px solid var(--border);border-radius:6px;background:var(--bg);">⚙ Configurazione sync</button>
+  <button onclick="openConfig()" style="height:34px;padding:0 14px;font-size:13px;cursor:pointer;border:1px solid var(--border);border-radius:6px;background:var(--bg);" title="Impostazioni sincronizzazione (avanzate)">⚙ Impostazioni</button>
 </header>
 
 <div class="tabs">
@@ -304,12 +304,14 @@ td.st-blocked { background: #fde5e7 !important; }
 <div class="modal-overlay" id="modal-config">
   <div class="modal">
     <h2>Configurazione sincronizzazione</h2>
-    <p>Per condividere i dati tra più utenti, configura un endpoint JSON condiviso (es. JSONBin.io). Senza configurazione, i dati restano solo in questo browser.</p>
-    <div class="help-box"><strong>URL preconfigurato:</strong> il tool punta già al bin condiviso del team. Inserisci la <strong>X-Master-Key</strong> ricevuta dal responsabile per attivare la sincronizzazione.</div>
-    <label>URL Endpoint sync (GET/PUT JSON)</label>
+    <p>Il tool è già configurato per puntare al bin condiviso del team. Normalmente non serve modificare nulla qui.</p>
+    <div class="help-box">
+      <strong>Sync attiva:</strong> i dati vengono salvati automaticamente nel bin JSONBin del team. Le modifiche sono visibili agli altri utenti entro l'intervallo di polling impostato sotto.
+    </div>
+    <label>URL Endpoint sync (avanzato — modificare solo se richiesto)</label>
     <input type="url" id="cfg-url" placeholder="https://api.jsonbin.io/v3/b/XXXXX" />
-    <label>Header autenticazione (formato: Nome: valore — più header separati da `;` o a capo)</label>
-    <input type="text" id="cfg-auth" placeholder="X-Master-Key: $2a$10$..." />
+    <label>Header autenticazione aggiuntivi (opzionale, raro)</label>
+    <input type="text" id="cfg-auth" placeholder="lascia vuoto a meno di indicazioni specifiche" />
     <label>Intervallo polling (secondi, 0 = disabilitato)</label>
     <input type="text" id="cfg-poll" placeholder="30" />
     <div class="actions">
@@ -362,9 +364,15 @@ const NOTE_MAX_WORDS = 100;
 const STORAGE_KEY = "gantt_l1_2026_data_v3";
 const CONFIG_KEY = "gantt_l1_2026_config";
 
+// Configurazione preimpostata: URL del bin condiviso del team + Access Keys con scope su questo singolo bin.
+// La chiave "read" è usata per le GET, la chiave "write" per PUT/DELETE.
+// Anche se l'URL del tool venisse condiviso oltre il team previsto, le chiavi danno accesso solo a questo bin,
+// non a tutto l'account JSONBin (la X-Master-Key non è hardcoded).
 const DEFAULT_CONFIG = {
   url: "https://api.jsonbin.io/v3/b/6a0dc36a6610dd3ae877dbd8",
-  auth: "",
+  readKey: "$2a$10$apeOaRtjXmfCmVh1jIRCeuCQhazoZRI4TCLcc6XKvspqtFYYpl19W",
+  writeKey: "$2a$10$DeCSIv6wr4E7zIEot8GSv.n0B1A8aoCsj9lKo9cm.GWlHMbqZnXTa",
+  auth: "", // header custom opzionale aggiuntivo (raro)
   poll: 30
 };
 
@@ -384,7 +392,13 @@ let config = Object.assign({}, DEFAULT_CONFIG);
 let pendingAddSubParent = null;
 let lastSaveAt = 0;       // timestamp ultimo PUT completato con successo
 let saveInProgress = false; // true mentre una PUT è in volo
-const SAVE_GRACE_MS = 8000; // ignora le GET che arrivano entro N ms da un PUT
+const SAVE_GRACE_MS = 15000; // ignora le GET che arrivano entro N ms da un PUT
+
+// Tracker delle modifiche locali non ancora confermate dal server.
+// Ogni voce: "values:<rowid>:<key>" o "statuses:<rowid>:<key>" o "subs:<subId>"
+// Resta in memoria fino al prossimo successful save (le voci confermate vengono ripulite).
+const dirtyKeys = new Set();
+function markDirty(kind, id) { dirtyKeys.add(kind + ":" + id); }
 
 function setStatus(text, kind) {
   document.getElementById("status-text").textContent = text;
@@ -400,7 +414,10 @@ function loadConfig() {
     if (raw) {
       const stored = JSON.parse(raw);
       config = Object.assign({}, DEFAULT_CONFIG, stored);
-      // If the stored url is empty, restore default
+      // Le chiavi di accesso sono hardcoded: anche se localStorage contiene una vecchia versione
+      // senza readKey/writeKey, ripristina sempre i valori default.
+      config.readKey = DEFAULT_CONFIG.readKey;
+      config.writeKey = DEFAULT_CONFIG.writeKey;
       if (!config.url) config.url = DEFAULT_CONFIG.url;
     }
   } catch(e) {}
@@ -410,6 +427,9 @@ function saveConfig() {
   config.auth = document.getElementById("cfg-auth").value.trim();
   config.poll = parseInt(document.getElementById("cfg-poll").value, 10);
   if (isNaN(config.poll)) config.poll = 30;
+  // Le chiavi restano quelle hardcoded, non modificabili da UI
+  config.readKey = DEFAULT_CONFIG.readKey;
+  config.writeKey = DEFAULT_CONFIG.writeKey;
   localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
   closeConfig();
   setupPolling();
@@ -423,13 +443,23 @@ function openConfig() {
 }
 function closeConfig() { document.getElementById("modal-config").classList.remove("open"); }
 
-function buildHeaders() {
+function buildHeaders(method) {
   const h = {"Content-Type": "application/json"};
-  // Disable JSONBin per-request versioning so GET always returns the latest write
-  if (/jsonbin\.io/i.test(config.url || "")) {
+  const isJsonBin = /jsonbin\.io/i.test(config.url || "");
+  if (isJsonBin) {
+    // Disable JSONBin per-request versioning so GET always returns the latest write
     h["X-Bin-Versioning"] = "false";
+    // Use appropriate Access Key based on HTTP method
+    // GET → readKey (read-only), PUT/DELETE → writeKey (read+write)
+    if (method === "GET" && config.readKey) {
+      h["X-Access-Key"] = config.readKey;
+    } else if ((method === "PUT" || method === "DELETE") && config.writeKey) {
+      h["X-Access-Key"] = config.writeKey;
+    } else if (config.writeKey) {
+      h["X-Access-Key"] = config.writeKey; // fallback
+    }
   }
-  // Support multiple headers separated by newlines or ;
+  // Custom auth header(s) opzionali aggiuntivi
   if (config.auth) {
     const lines = config.auth.split(/\r?\n|;/);
     for (const line of lines) {
@@ -463,6 +493,33 @@ function normalizePayload(payload) {
   return { values, subs: {}, statuses: {} };
 }
 
+// Merge remote payload with local data, keeping any keys the user changed locally
+// until the server has confirmed them. dirty entries are like "values:42:req", "subs:sub_xyz".
+function mergePreservingDirty(remote, local, dirty) {
+  const out = {
+    values: Object.assign({}, remote.values),
+    subs: Object.assign({}, remote.subs),
+    statuses: Object.assign({}, remote.statuses)
+  };
+  for (const entry of dirty) {
+    const idx = entry.indexOf(":");
+    if (idx < 0) continue;
+    const kind = entry.slice(0, idx);
+    const key = entry.slice(idx + 1);
+    if (kind === "values") {
+      if (key in local.values) out.values[key] = local.values[key];
+      else delete out.values[key];
+    } else if (kind === "statuses") {
+      if (key in local.statuses) out.statuses[key] = local.statuses[key];
+      else delete out.statuses[key];
+    } else if (kind === "subs") {
+      if (key in local.subs) out.subs[key] = local.subs[key];
+      else delete out.subs[key];
+    }
+  }
+  return out;
+}
+
 async function loadData(opts) {
   const isPolling = !!(opts && opts.polling);
   // Race protection: never overwrite local state with remote if we just saved
@@ -476,7 +533,7 @@ async function loadData(opts) {
       // Reduce JSONBin CDN cache by appending a cache-buster
       const sep = config.url.includes("?") ? "&" : "?";
       const url = config.url + sep + "_=" + Date.now();
-      const res = await fetch(url, { headers: buildHeaders(), cache: "no-store" });
+      const res = await fetch(url, { headers: buildHeaders("GET"), cache: "no-store" });
       if (res.ok) {
         const json = await res.json();
         let payload = json;
@@ -486,7 +543,8 @@ async function loadData(opts) {
         if (saveInProgress || (Date.now() - lastSaveAt < SAVE_GRACE_MS)) {
           return;
         }
-        data = remote;
+        // Merge remote with local, preserving any locally-dirty keys until the server confirms them
+        data = mergePreservingDirty(remote, data, dirtyKeys);
         setStatus("Sincronizzato (remoto)", null);
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
         rebuildAllRows();
@@ -516,15 +574,20 @@ async function loadData(opts) {
 
 async function persistData() {
   if (saveTimer) clearTimeout(saveTimer);
+  // Block any polling overwrite from the moment a save is scheduled,
+  // not only when the PUT is in flight. This prevents a polling GET that
+  // started before our PUT from clobbering newly added data.
+  saveInProgress = true;
+  lastSaveAt = Date.now();
   saveTimer = setTimeout(async () => {
     setStatus("Salvataggio...", "saving");
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
     if (config.url) {
-      saveInProgress = true;
       try {
-        const res = await fetch(config.url, { method: "PUT", headers: buildHeaders(), body: JSON.stringify(data) });
+        const res = await fetch(config.url, { method: "PUT", headers: buildHeaders("PUT"), body: JSON.stringify(data) });
         if (res.ok) {
           lastSaveAt = Date.now();
+          dirtyKeys.clear(); // server ha confermato, nessuna chiave più "in attesa"
           setStatus("Sincronizzato (remoto)", null);
         } else {
           console.warn("Save returned status:", res.status);
@@ -537,6 +600,7 @@ async function persistData() {
         saveInProgress = false;
       }
     } else {
+      saveInProgress = false;
       setStatus("Sincronizzato (locale)", null);
     }
   }, 500);
@@ -595,12 +659,14 @@ function getVal(rowId, key) { return data.values[rowId + ":" + key] || ""; }
 function setVal(rowId, key, val) {
   const k = rowId + ":" + key;
   if (val) data.values[k] = val; else delete data.values[k];
+  markDirty("values", k);
   persistData();
 }
 function getStatus(rowId, key) { return data.statuses[rowId + ":" + key] || ""; }
 function setCellStatus(rowId, key, status) {
   const k = rowId + ":" + key;
   if (status) data.statuses[k] = status; else delete data.statuses[k];
+  markDirty("statuses", k);
   persistData();
 }
 
@@ -845,6 +911,7 @@ function confirmAddSub() {
     az: azText,
     createdAt: Date.now()
   };
+  markDirty("subs", subId);
   persistData();
   closeAddSub();
   rebuildAllRows();
@@ -855,12 +922,13 @@ function confirmAddSub() {
 function deleteSubActivity(subId) {
   if (!data.subs[subId]) return;
   delete data.subs[subId];
+  markDirty("subs", subId); // marca come modificata (eliminazione)
   // Also remove any associated values and statuses
   for (const k in data.values) {
-    if (k.startsWith(subId + ":")) delete data.values[k];
+    if (k.startsWith(subId + ":")) { delete data.values[k]; markDirty("values", k); }
   }
   for (const k in data.statuses) {
-    if (k.startsWith(subId + ":")) delete data.statuses[k];
+    if (k.startsWith(subId + ":")) { delete data.statuses[k]; markDirty("statuses", k); }
   }
   persistData();
   rebuildAllRows();
