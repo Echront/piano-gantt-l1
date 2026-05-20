@@ -1,0 +1,1252 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Piano Gantt L1 2026 - Tool Collaborativo</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #ffffff; --bg-2: #f7f9fc; --bg-3: #eef2f7;
+  --border: #d0d7de; --border-strong: #afb8c1;
+  --text: #1f2328; --text-2: #57606a; --text-3: #8c959f;
+  --accent: #1f6feb; --accent-bg: #ddf4ff;
+  --success: #1a7f37; --warning: #9a6700; --danger: #cf222e;
+  --text-bg: #fff8e7;
+  --sub-bg: #f0fbf4; --sub-border: #b8e6c4;
+  --radius: 8px;
+}
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 13px; color: var(--text); background: var(--bg-2); margin: 0; padding: 16px;
+}
+.app { max-width: 100%; margin: 0 auto; }
+header.app-header {
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px 18px; margin-bottom: 12px;
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+}
+header h1 { font-size: 17px; font-weight: 600; margin: 0; }
+header .subtitle { font-size: 12px; color: var(--text-2); margin-top: 2px; }
+.tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
+.tab {
+  padding: 8px 14px; font-size: 13px; cursor: pointer; border: none;
+  background: transparent; color: var(--text-2); border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 500; }
+.toolbar {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  padding: 10px 12px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius); margin-bottom: 10px;
+}
+.toolbar select, .toolbar input[type=text] {
+  height: 32px; font-size: 12px; padding: 0 8px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--bg); min-width: 130px;
+}
+.toolbar button {
+  height: 32px; padding: 0 12px; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
+  color: var(--text); transition: all .15s;
+}
+.toolbar button:hover { background: var(--bg-3); }
+.toolbar button.primary { background: var(--accent); color: white; border-color: var(--accent); }
+.toolbar button.primary:hover { filter: brightness(0.92); }
+.status { margin-left: auto; font-size: 11px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
+.dot.saving { background: var(--warning); }
+.dot.error { background: var(--danger); }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.kpi { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+.kpi-grid { display: grid; grid-template-columns: repeat(3, minmax(280px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.kpi-card {
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px 16px; min-height: 200px; display: flex; flex-direction: column;
+}
+.kpi-card h4 {
+  font-size: 12px; font-weight: 600; margin: 0 0 12px; color: var(--text-2);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.kpi-card .summary {
+  font-size: 11px; color: var(--text-3); margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid var(--bg-3);
+}
+.chart-wrap { flex: 1; position: relative; min-height: 160px; }
+.prog-list { display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.prog-row { font-size: 12px; }
+.prog-row .prog-label { display: flex; justify-content: space-between; margin-bottom: 4px; }
+.prog-row .prog-label .name { font-weight: 500; color: var(--text); }
+.prog-row .prog-label .count { color: var(--text-2); font-variant-numeric: tabular-nums; font-size: 11px; }
+.prog-row .prog-bar {
+  width: 100%; height: 8px; background: var(--bg-3); border-radius: 4px; overflow: hidden;
+  position: relative;
+}
+.prog-row .prog-bar-fill {
+  height: 100%; background: var(--accent); transition: width 0.3s ease;
+}
+.prog-row .prog-bar-fill.partial { background: var(--warning); }
+.prog-row .prog-bar-fill.empty { background: var(--text-3); }
+@media (max-width: 980px) { .kpi-grid { grid-template-columns: 1fr; } }
+.kpi .lbl { font-size: 11px; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.04em; }
+.kpi .val { font-size: 24px; font-weight: 600; margin-top: 2px; }
+.table-wrap { max-height: 70vh; overflow: auto; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); }
+table.gantt { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 12px; table-layout: fixed; }
+table.gantt th, table.gantt td {
+  padding: 7px 9px; border-bottom: 1px solid var(--border);
+  text-align: left; vertical-align: top; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+table.gantt thead th {
+  position: sticky; top: 0; background: var(--bg-3); font-weight: 600;
+  font-size: 11px; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.04em; z-index: 2;
+}
+table.gantt thead th.text-col { background: var(--text-bg); }
+table.gantt td.att { white-space: normal; font-size: 12px; line-height: 1.5; }
+.row-inc { background: var(--bg-3); }
+.row-inc td { font-weight: 600; padding: 9px 12px; }
+.row-af td { font-size: 11px; color: var(--text-2); padding: 6px 10px 6px 24px; background: var(--bg); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+.row-amb td { font-size: 12px; padding: 6px 10px 6px 38px; background: var(--bg); font-style: italic; color: var(--text-2); }
+.row-att td { background: var(--bg); }
+.row-att td.att { padding-left: 52px; }
+.row-att td.text-col { background: var(--text-bg); }
+/* Sub-activity rows: indented further, distinct green tint */
+.row-sub td { background: var(--sub-bg); border-left: 2px solid var(--sub-border); }
+.row-sub td.att { padding-left: 68px; position: relative; }
+.row-sub td.att::before { content: "↳"; position: absolute; left: 52px; color: var(--sub-border); font-weight: 600; }
+.row-sub td.text-col { background: #e6f5ea; }
+/* Add-sub-activity action row */
+.row-add-sub td {
+  background: var(--bg); padding: 4px 9px 4px 68px; border-bottom: 1px dashed var(--border);
+}
+.btn-add-sub {
+  height: 24px; padding: 0 10px; font-size: 11px; cursor: pointer;
+  border: 1px dashed var(--border-strong); border-radius: 4px; background: transparent;
+  color: var(--text-2);
+}
+.btn-add-sub:hover { background: var(--sub-bg); color: var(--text); border-color: var(--sub-border); border-style: solid; }
+.btn-del-sub {
+  width: 20px; height: 20px; padding: 0; font-size: 12px; cursor: pointer;
+  border: 1px solid transparent; border-radius: 4px; background: transparent;
+  color: var(--text-3); line-height: 1; display: inline-flex; align-items: center; justify-content: center;
+}
+.btn-del-sub:hover { background: #ffe5e5; color: var(--danger); border-color: #f5a3a3; }
+input.date-cell, input.text-cell, textarea.note-cell {
+  width: 100%; font-size: 11px; padding: 2px 4px;
+  border: 1px solid transparent; background: transparent; border-radius: 4px;
+  color: var(--text); font-family: inherit;
+}
+input.date-cell { height: 26px; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+input.text-cell { height: 26px; }
+textarea.note-cell { min-height: 26px; resize: vertical; font-size: 11px; line-height: 1.4; white-space: normal; }
+input.date-cell:hover, input.text-cell:hover, textarea.note-cell:hover { border-color: var(--border); background: var(--bg-2); }
+input.date-cell:focus, input.text-cell:focus, textarea.note-cell:focus {
+  border-color: var(--accent); background: var(--bg); outline: none;
+  box-shadow: 0 0 0 3px rgba(31,111,235,0.15);
+}
+input.date-cell.has-val { font-weight: 600; background: var(--accent-bg); }
+input.text-cell.has-val, textarea.note-cell.has-val { background: #fff3d6; font-weight: 500; }
+
+/* Cella con stato (date + status flag stack) */
+.cell-stack { display: flex; flex-direction: column; gap: 2px; }
+.status-row { display: flex; gap: 2px; }
+.status-btn {
+  flex: 1; height: 18px; padding: 0; font-size: 9px; font-weight: 600;
+  border: 1px solid var(--border); border-radius: 3px; background: var(--bg);
+  color: var(--text-3); cursor: pointer; transition: all .12s;
+  text-transform: uppercase; letter-spacing: 0.02em;
+}
+.status-btn:hover { border-color: var(--border-strong); color: var(--text-2); }
+.status-btn.active.done { background: #1a7f37; color: white; border-color: #1a7f37; }
+.status-btn.active.late { background: #9a6700; color: white; border-color: #9a6700; }
+.status-btn.active.blocked { background: #cf222e; color: white; border-color: #cf222e; }
+/* Sfondo cella riflette lo stato attivo */
+td.st-done { background: #e8f5ec !important; }
+td.st-late { background: #fff4d6 !important; }
+td.st-blocked { background: #fde5e7 !important; }
+.row-sub td.st-done { background: #d8efde !important; }
+.row-sub td.st-late { background: #f5e8c5 !important; }
+.row-sub td.st-blocked { background: #f0d4d7 !important; }
+.note-counter { font-size: 10px; color: var(--text-3); margin-top: 2px; text-align: right; }
+.note-counter.over { color: var(--danger); font-weight: 600; }
+.az-pill { display: inline-block; font-size: 10px; padding: 2px 7px; border-radius: 4px; background: var(--bg-3); color: var(--text-2); white-space: nowrap; }
+.sub-pill { display: inline-block; font-size: 9px; padding: 1px 6px; border-radius: 3px; background: var(--sub-border); color: #0d4f1f; margin-left: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; vertical-align: middle; }
+.report-section { margin-top: 18px; }
+.report-section h3 { font-size: 14px; font-weight: 600; margin: 0 0 10px; }
+.report-table { width: 100%; font-size: 12px; border-collapse: collapse; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--bg); }
+.report-table th, .report-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); text-align: left; }
+.report-table th { background: var(--bg-3); font-weight: 600; font-size: 11px; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.04em; }
+.report-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.st-pill {
+  display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 6px;
+  border-radius: 3px; letter-spacing: 0.03em; margin-right: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.st-done-pill { background: #d4f4dd; color: #0d4f1f; }
+.st-late-pill { background: #fff0c4; color: #6e4400; }
+.st-blocked-pill { background: #fcd0d4; color: #8a131c; }
+.progress-bar { display: inline-block; width: 100%; height: 6px; background: var(--bg-3); border-radius: 3px; overflow: hidden; vertical-align: middle; }
+.progress-bar-fill { height: 100%; background: var(--accent); }
+.col-inc { width: 70px; }
+.col-af { width: 100px; }
+.col-amb { width: 150px; }
+.col-att { width: 240px; }
+.col-az { width: 100px; }
+.col-date { width: 95px; }
+.col-text-sm { width: 110px; }
+.col-note { width: 200px; }
+.empty-state { padding: 30px; text-align: center; color: var(--text-2); font-size: 13px; }
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; align-items: center; justify-content: center; }
+.modal-overlay.open { display: flex; }
+.modal { background: var(--bg); border-radius: 10px; padding: 24px; max-width: 520px; width: 90%; max-height: 85vh; overflow: auto; }
+.modal h2 { font-size: 17px; margin: 0 0 6px; }
+.modal p { color: var(--text-2); font-size: 13px; line-height: 1.55; margin: 0 0 12px; }
+.modal label { display: block; font-size: 12px; font-weight: 600; margin: 12px 0 6px; }
+.modal input, .modal textarea, .modal select {
+  width: 100%; font-size: 13px; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 6px; font-family: inherit;
+  background: var(--bg); color: var(--text);
+}
+.modal input, .modal select { height: 36px; padding: 0 10px; }
+.modal textarea { min-height: 60px; resize: vertical; }
+.modal .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+.modal .actions button { height: 34px; padding: 0 16px; font-size: 13px; cursor: pointer; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
+.modal .actions button.primary { background: var(--accent); color: white; border-color: var(--accent); }
+.help-box { background: var(--accent-bg); border: 1px solid #b6e0fe; border-radius: 6px; padding: 10px 12px; font-size: 12px; color: #033a6e; margin: 10px 0; }
+.legend { font-size: 11px; color: var(--text-2); display: inline-flex; gap: 12px; margin-left: 8px; }
+.legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.legend-sq { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+<header class="app-header">
+  <div>
+    <h1>Piano Gantt L1 2026</h1>
+    <div class="subtitle">Tool collaborativo per gestione date di consegna per fase</div>
+  </div>
+  <button onclick="openConfig()" style="height:34px;padding:0 14px;font-size:13px;cursor:pointer;border:1px solid var(--border);border-radius:6px;background:var(--bg);">⚙ Configurazione sync</button>
+</header>
+
+<div class="tabs">
+  <button class="tab active" data-tab="gantt">📋 Gantt</button>
+  <button class="tab" data-tab="report">📊 Report &amp; KPI</button>
+</div>
+
+<div id="tab-gantt">
+  <div class="toolbar">
+    <select id="f-inc"><option value="">Tutti Incarichi</option></select>
+    <select id="f-af"><option value="">Tutte Aree Funzionali</option></select>
+    <select id="f-amb"><option value="">Tutti Ambiti</option></select>
+    <select id="f-az"><option value="">Tutte Aziende</option></select>
+    <select id="f-phase">
+      <option value="">Tutte le fasi</option>
+      <option value="any">Almeno 1 data compilata</option>
+      <option value="none">Nessuna data</option>
+      <option value="complete">Tutte le fasi compilate</option>
+    </select>
+    <input type="text" id="f-search" placeholder="Cerca testo attività..." />
+    <button id="btn-reset">↻ Reset</button>
+    <button id="btn-export" class="primary">⬇ Esporta CSV</button>
+    <button id="btn-reload">⟳ Ricarica</button>
+    <div class="status"><span class="dot" id="status-dot"></span><span id="status-text">Caricamento...</span></div>
+  </div>
+  <div class="legend">
+    <span class="legend-item"><span class="legend-sq" style="background:var(--bg)"></span> Attività piano</span>
+    <span class="legend-item"><span class="legend-sq" style="background:var(--sub-bg);border:1px solid var(--sub-border)"></span> Sotto-attività utente</span>
+  </div>
+  <div class="table-wrap">
+    <table class="gantt">
+      <colgroup>
+        <col class="col-inc"><col class="col-af"><col class="col-amb"><col class="col-att"><col class="col-az">
+        <col class="col-date"><col class="col-date"><col class="col-date">
+        <col class="col-text-sm">
+        <col class="col-date"><col class="col-date">
+        <col class="col-text-sm">
+        <col class="col-date"><col class="col-date"><col class="col-date">
+        <col class="col-note">
+      </colgroup>
+      <thead><tr>
+        <th>Incarico</th><th>Area Funz.</th><th>Ambito</th><th>Attività</th><th>Azienda</th>
+        <th>Requisiti</th><th>UCS</th><th>UCR</th>
+        <th class="text-col">Item Polarion</th>
+        <th>PRE-IT</th><th>Int. Test</th>
+        <th class="text-col">Release</th>
+        <th>IT</th><th>PreProd</th><th>Prod</th>
+        <th class="text-col">Note</th>
+      </tr></thead>
+      <tbody id="gantt-body"><tr><td colspan="16" class="empty-state">Caricamento...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="tab-report" style="display:none">
+  <div class="kpi-grid" id="kpis-full">
+    <div class="kpi-card">
+      <h4>Carico di lavoro per azienda</h4>
+      <div class="chart-wrap"><canvas id="chart-workload-full"></canvas></div>
+      <div class="summary" id="workload-full-summary"></div>
+    </div>
+    <div class="kpi-card">
+      <h4>Consegne previste per mese</h4>
+      <div class="chart-wrap"><canvas id="chart-deliveries-full"></canvas></div>
+      <div class="summary" id="deliveries-full-summary"></div>
+    </div>
+    <div class="kpi-card">
+      <h4>Avanzamento per incarico</h4>
+      <div class="prog-list" id="progress-incarichi-full"></div>
+      <div class="summary" id="incarichi-full-summary"></div>
+    </div>
+  </div>
+  <div class="report-section"><h3>Avanzamento per Area Funzionale</h3><div id="rep-af"></div></div>
+  <div class="report-section"><h3>Avanzamento per Fase</h3><div id="rep-phase"></div></div>
+</div>
+
+<div class="modal-overlay" id="modal-config">
+  <div class="modal">
+    <h2>Configurazione sincronizzazione</h2>
+    <p>Per condividere i dati tra più utenti, configura un endpoint JSON condiviso (es. JSONBin.io). Senza configurazione, i dati restano solo in questo browser.</p>
+    <div class="help-box"><strong>URL preconfigurato:</strong> il tool punta già al bin condiviso del team. Inserisci la <strong>X-Master-Key</strong> ricevuta dal responsabile per attivare la sincronizzazione.</div>
+    <label>URL Endpoint sync (GET/PUT JSON)</label>
+    <input type="url" id="cfg-url" placeholder="https://api.jsonbin.io/v3/b/XXXXX" />
+    <label>Header autenticazione (formato: Nome: valore — più header separati da `;` o a capo)</label>
+    <input type="text" id="cfg-auth" placeholder="X-Master-Key: $2a$10$..." />
+    <label>Intervallo polling (secondi, 0 = disabilitato)</label>
+    <input type="text" id="cfg-poll" placeholder="30" />
+    <div class="actions">
+      <button onclick="closeConfig()">Annulla</button>
+      <button class="primary" onclick="saveConfig()">Salva</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-add-sub">
+  <div class="modal">
+    <h2>Nuova sotto-attività</h2>
+    <p id="add-sub-context"></p>
+    <label>Descrizione attività *</label>
+    <textarea id="sub-att" placeholder="Descrivi la sotto-attività..." required></textarea>
+    <label>Azienda (opzionale)</label>
+    <select id="sub-az">
+      <option value="">— Seleziona —</option>
+      <option value="B.C.">B.C.</option>
+      <option value="CAMELOT">CAMELOT</option>
+      <option value="Elite/Digital360">Elite/Digital360</option>
+      <option value="ENG">ENG</option>
+    </select>
+    <div class="actions">
+      <button onclick="closeAddSub()">Annulla</button>
+      <button class="primary" onclick="confirmAddSub()">Aggiungi</button>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script>
+const PHASE_COLS = [
+  {name: "Requisiti",        kind: "date", key: "req"},
+  {name: "UCS",              kind: "date", key: "ucs"},
+  {name: "UCR",              kind: "date", key: "ucr"},
+  {name: "Item Polarion",    kind: "text", key: "polarion"},
+  {name: "PRE-IT",           kind: "date", key: "preit"},
+  {name: "Integration Test", kind: "date", key: "inttest"},
+  {name: "Release",          kind: "text", key: "release"},
+  {name: "IT",               kind: "date", key: "it"},
+  {name: "PreProd",          kind: "date", key: "preprod"},
+  {name: "Prod",             kind: "date", key: "prod"},
+  {name: "Note",             kind: "note", key: "note"}
+];
+const DATE_PHASES = PHASE_COLS.filter(p => p.kind === "date");
+const NOTE_MAX_WORDS = 100;
+
+const STORAGE_KEY = "gantt_l1_2026_data_v3";
+const CONFIG_KEY = "gantt_l1_2026_config";
+
+const DEFAULT_CONFIG = {
+  url: "https://api.jsonbin.io/v3/b/6a0dc36a6610dd3ae877dbd8",
+  auth: "",
+  poll: 30
+};
+
+const SEED = [{"id":1,"inc":"26SB8","af":"Atti","amb":"Presidio tecnico e operativo AF Atti per attività relative a bandi programmazione 21-27","att":"Presidio tecnico e operativo rafforzato per la gestione e la manutenzione delle funzionalità dell'AF ATTI necessarie per la gestione e il monitoraggio de bandi per la programmazione 21-27","az":"Elite/Digital360"},{"id":2,"inc":"26SB8","af":"Atti","amb":"Presidio tecnico e operativo AF Atti per attività relative a bandi programmazione 21-27","att":"Analisi preliminare e demand management con RL per MEV relative all’AF ATTI,","az":"Elite/Digital360"},{"id":3,"inc":"26SB8","af":"Atti","amb":"Presidio tecnico e operativo AF Atti per attività relative a bandi programmazione 21-27","att":"Presa in carico e analisi preliminare anomalie relative all’AF ATTI, con presidio rafforzato relativamente alle attività di identificazione di problematiche applicative e verifica e bonifica dei dati","az":"Elite/Digital360"},{"id":4,"inc":"26SB8","af":"Atti","amb":"Presidio tecnico e operativo AF Atti per attività relative a bandi programmazione 21-27","att":"Analisi funzionale alla risolzuione di anomalie relative a sviluppi derivanti da attività di integrazione e monitoraggio;","az":"Elite/Digital360"},{"id":5,"inc":"26SB8","af":"Atti","amb":"Presidio tecnico e operativo AF Atti per attività relative a bandi programmazione 21-27","att":"Analisi per la risoluzione di anomalie relative a sviluppi derivanti da attività di integrazione, fino a un massimo di 1 intervento al mese","az":"Elite/Digital360"},{"id":6,"inc":"26SB8","af":"Atti","amb":"Presidio tecnico e operativo AF Atti per attività relative a bandi programmazione 21-27","att":"Sviluppo piccole MEV (< 12 gg) fino ad un massimo di 2 al mese","az":"Elite/Digital360"},{"id":7,"inc":"26SB8","af":"Atti","amb":"Analisi e sviluppo di evolutive relative al modulo ATTI","att":"Monitoraggio dei progetti della politica di coesione 2021-27 - recupero sistemi di pagamento fn10 (regis)","az":"Elite/Digital360"},{"id":8,"inc":"26SB8","af":"Atti","amb":"Analisi e sviluppo di evolutive relative al modulo ATTI","att":"Monitoraggio e correlazione all’interno del modulo atti dell’informazione della DGR sui movimenti contabili","az":"Elite/Digital360"},{"id":9,"inc":"26SB8","af":"Atti","amb":"Analisi e sviluppo di evolutive relative al modulo ATTI","att":"Allineamento in BeS delle modifiche movimenti in sap su pagine contabili trasmesse da BeS","az":"Elite/Digital360"},{"id":10,"inc":"26SB8","af":"Atti","amb":"Analisi e sviluppo di evolutive relative al modulo ATTI","att":"Recupero atti: associazione movimenti sap con movimenti liberi generati in BeS","az":"Elite/Digital360"},{"id":11,"inc":"26SB8","af":"Atti","amb":"Analisi e sviluppo di evolutive relative al modulo ATTI","att":"Blocco recupero ATTI SAP da DG diverse da quella appartenenza","az":"Elite/Digital360"},{"id":12,"inc":"26SB8","af":"Atti","amb":"Analisi e sviluppo di evolutive relative al modulo ATTI","att":"Gestione prss su movimenti BeS","az":"Elite/Digital360"},{"id":13,"inc":"26SB8","af":"Atti","amb":"(senza Ambito)","att":"","az":"B.C."},{"id":14,"inc":"26SB8","af":"Progettazione","amb":"Adeguamenti normativi - introduzione e adeguamento delle logiche Accrual","att":"Analisi degli impatti normativi sulle logiche contabili di competenza economica","az":"B.C."},{"id":15,"inc":"26SB8","af":"Progettazione","amb":"Adeguamenti normativi - introduzione e adeguamento delle logiche Accrual","att":"Progettazione e sviluppo delle modifiche applicative per il principio di Accrual","az":"B.C."},{"id":16,"inc":"26SB8","af":"Progettazione","amb":"Adeguamenti normativi - introduzione e adeguamento delle logiche Accrual","att":"Allineamento dei flussi di rendicontazione e dei tracciati di interscambio","az":"B.C."},{"id":17,"inc":"26SB8","af":"Progettazione","amb":"Adeguamenti normativi - introduzione e adeguamento delle logiche Accrual","att":"Supporto al test funzionale e all'avviamento in esercizio","az":"B.C."},{"id":18,"inc":"26SB8","af":"Progettazione","amb":"Adeguamenti normativi - adeguamenti richiesti dal Codice Incentivi","att":"Recepimento delle prescrizioni del Codice Incentivi e analisi degli impatti applicativi","az":"B.C."},{"id":19,"inc":"26SB8","af":"Progettazione","amb":"Adeguamenti normativi - adeguamenti richiesti dal Codice Incentivi","att":"Progettazione e sviluppo delle modifiche su procedimenti, anagrafiche e regole di calcolo","az":"B.C."},{"id":20,"inc":"26SB8","af":"Progettazione","amb":"Adeguamenti normativi - adeguamenti richiesti dal Codice Incentivi","att":"Adeguamento dei flussi di rendicontazione e dei controlli automatici","az":"B.C."},{"id":21,"inc":"26SB8","af":"Progettazione","amb":"Adeguamenti normativi - adeguamenti richiesti dal Codice Incentivi","att":"Supporto al collaudo e accompagnamento al rilascio in produzione","az":"B.C."},{"id":22,"inc":"26SB8","af":"Progettazione","amb":"Adeguamenti normativi - adeguamenti richiesti dai sistemi REGIS","att":"Analisi dei requisiti di interoperabilità con REGIS e mappatura dei dati","az":"B.C."},{"id":23,"inc":"26SB8","af":"Progettazione","amb":"Adeguamenti normativi - adeguamenti richiesti dai sistemi REGIS","att":"Sviluppo delle modifiche applicative e dei flussi di trasmissione richiesti","az":"B.C."},{"id":24,"inc":"26SB8","af":"Progettazione","amb":"Adeguamenti normativi - adeguamenti richiesti dai sistemi REGIS","att":"Adeguamento dei controlli di qualità del dato e della reportistica di monitoraggio","az":"B.C."},{"id":25,"inc":"26SB8","af":"Progettazione","amb":"Adeguamenti normativi - adeguamenti richiesti dai sistemi REGIS","att":"Supporto al collaudo congiunto e alla messa in esercizio","az":"B.C."},{"id":26,"inc":"26SB8","af":"Monitoraggio","amb":"Gestione moduli e strumenti di trasmissione dati REGIS","att":"Presidio SAL e riunioni ordinarie di progetto (SAL settimanali, incontri con Regione, etc.)","az":"Elite/Digital360"},{"id":27,"inc":"26SB8","af":"Monitoraggio","amb":"Gestione moduli e strumenti di trasmissione dati REGIS","att":"Analisi preliminare e demand management per MEV relative ai moduli e agli strumenti per la verifica e trasmissione dei dati al sistema REGIS","az":"Elite/Digital360"},{"id":28,"inc":"26SB8","af":"Monitoraggio","amb":"Gestione moduli e strumenti di trasmissione dati REGIS","att":"Presa in carico e analisi preliminare anomalie","az":"Elite/Digital360"},{"id":29,"inc":"26SB8","af":"Monitoraggio","amb":"Gestione moduli e strumenti di trasmissione dati REGIS","att":"Risoluzione anomalie relative ai moduli e agli strumenti di integrazione con REGIS nei tempi previsti dagli SLA contrattuali","az":"Elite/Digital360"},{"id":30,"inc":"26SB8","af":"Monitoraggio","amb":"Gestione moduli e strumenti di trasmissione dati REGIS","att":"Supporto per post-go live di Regis - fasi 1, 2, 3, 4 - in accordo con L2 e Assistenza e con riferimento alle funzionalità relative a moduli e strumenti per la trasmissione dei dati REGIS","az":"Elite/Digital360"},{"id":31,"inc":"26SB8","af":"Monitoraggio","amb":"Monitoraggio e normalizzazione della base dati a supporto di reportistica operativa, Power BI e monitoraggio PNRR","att":"Presidio della qualità del dato in ottica di normalizzazione delle basi informative","az":"B.C."},{"id":32,"inc":"26SB8","af":"Monitoraggio","amb":"Monitoraggio e normalizzazione della base dati a supporto di reportistica operativa, Power BI e monitoraggio PNRR","att":"Evoluzione dei flussi di alimentazione verso il datawarehouse e Power BI","az":"B.C."},{"id":33,"inc":"26SB8","af":"Monitoraggio","amb":"Monitoraggio e normalizzazione della base dati a supporto di reportistica operativa, Power BI e monitoraggio PNRR","att":"Evoluzione della reportistica operativa e degli indicatori di monitoraggio PNRR","az":"B.C."},{"id":34,"inc":"26SB8","af":"Monitoraggio","amb":"Monitoraggio e normalizzazione della base dati a supporto di reportistica OpenData","att":"Presidio della qualità del dato per i dataset pubblicati in modalità OpenData finalizzato alla  Normalizzazione e arricchimento delle basi dati secondo gli standard di pubblicazione","az":"B.C."},{"id":35,"inc":"26SB8","af":"Monitoraggio","amb":"Monitoraggio e normalizzazione della base dati a supporto di reportistica OpenData","att":"Evoluzione dei flussi di estrazione e aggiornamento periodico dei dataset","az":"B.C."},{"id":36,"inc":"26SB8","af":"Monitoraggio","amb":"Monitoraggio e normalizzazione della base dati a supporto di reportistica OpenData","att":"Verifica di conformità ai requisiti di trasparenza e accessibilità del dato","az":"B.C."},{"id":37,"inc":"26SB8","af":"Monitoraggio","amb":"Supporto alla predisposizione, gestione e qualità dei dati per il sistema REGIS","att":"Definizione dei dati e delle anagrafiche richieste dal sistema REGIS","az":"B.C."},{"id":38,"inc":"26SB8","af":"Monitoraggio","amb":"Supporto alla predisposizione, gestione e qualità dei dati per il sistema REGIS","att":"Presidio della qualità, completezza e coerenza dei flussi ai fini della relativa trasmissione","az":"B.C."},{"id":39,"inc":"26SB8","af":"Monitoraggio","amb":"Supporto alla predisposizione, gestione e qualità dei dati per il sistema REGIS","att":"Gestione delle segnalazioni di scarto ai fini della successiva riconciliazione","az":"B.C."},{"id":40,"inc":"26SB8","af":"Monitoraggio","amb":"(senza Ambito)","att":"realizzazione ed evoluzione delle dashboard (Fondi UE)","az":"B.C."},{"id":41,"inc":"26SB8","af":"Monitoraggio","amb":"Integrazione REGIS- imlementazione controli e reportistica","att":"Realizzazione dei moduli interni a BeS per l'esecuzione di controlli semantici e sintattici prelininari alla trasmissione dati verso Regis e realizzazione di strumenti di monitoraggio. .","az":"Elite/Digital360"},{"id":42,"inc":"26SB8","af":"bandificio (CAMELOT)","amb":"Supporto istruttoria bandi I semestre","att":"Attività di supporto all'esecuzione di istruttoria dei bandi tramite applicazione di logiche di verifica automatica dei requisiti, per un massimo di 6 bandi nell'arco dell'anno di cui fino a 3 nuovi, con avvio  elaborazione e restituzione delle verifiche entro 2 giorni lavorativi dalla ricezione della richiesta, eseguendo fino a un massimo di 2 elaborazioni per bando a settimana.","az":"CAMELOT"},{"id":43,"inc":"26SB8","af":"bandificio (CAMELOT)","amb":"Supporto istruttoria bandi I semestre","att":"Per ogni bando, l'attività prevede il supporto al bandificio per la finalizzazione della modulistica per permettere l'integrazione con la procedura di verifica automatica dei requisiti.","az":"CAMELOT"},{"id":44,"inc":"26SB8","af":"bandificio (CAMELOT)","amb":"Supporto istruttoria bandi I semestre","att":"La verifica automatica dei requisiti potrà essere richiesta a partire da 10 giorni lavorativi dalla consegna delle specifiche della modulistica del bando.","az":"CAMELOT"},{"id":45,"inc":"26SB8","af":"bandificio (CAMELOT)","amb":"Supporto istruttoria bandi I semestre","att":"Erogazione e manutenzione del servizio Orchestratore utilizzato nell'automazione del processo su infrastruttura cloud del fornitore","az":"CAMELOT"},{"id":46,"inc":"26SB8","af":"bandificio (CAMELOT)","amb":"Supporto istruttoria bandi II semestre","att":"Attività di supporto all'esecuzione di istruttoria dei bandi tramite applicazione di logiche di verifica automatica dei requisiti, per un massimo di 6 bandi nell'arco dell'anno di cui fino a 3 nuovi, con avvio  elaborazione e restituzione delle verifiche entro 2 giorni lavorativi dalla ricezione della richiesta, eseguendo fino a un massimo di 2 elaborazioni per bando a settimana.","az":"CAMELOT"},{"id":47,"inc":"26SB8","af":"bandificio (CAMELOT)","amb":"Supporto istruttoria bandi II semestre","att":"Per ogni bando, l'attività prevede il supporto al bandificio per la finalizzazione della modulistica per permettere l'integrazione con la procedura di verifica automatica dei requisiti.","az":"CAMELOT"},{"id":48,"inc":"26SB8","af":"bandificio (CAMELOT)","amb":"Supporto istruttoria bandi II semestre","att":"La verifica automatica dei requisiti potrà essere richiesta a partire da 10 giorni lavorativi dalla consegna delle specifiche della modulistica del bando.","az":"CAMELOT"},{"id":49,"inc":"26SB8","af":"bandificio (CAMELOT)","amb":"Supporto istruttoria bandi II semestre","att":"Erogazione e manutenzione del servizio Orchestratore utilizzato nell'automazione del processo su infrastruttura cloud del fornitore","az":"CAMELOT"},{"id":50,"inc":"26SB8","af":"bandificio (CAMELOT)","amb":"Sviluppi per  istruttoria bandi I semestre","att":"Attività di sviluppo necessaria alla configurazione del processo di verifica automatica dei bandi, per un massimo di 6 bandi nell'arco dell'anno di cui fino a 3 nuovi.","az":"CAMELOT"},{"id":51,"inc":"26SB8","af":"bandificio (CAMELOT)","amb":"Sviluppi per  istruttoria bandi II semestre","att":"Attività di sviluppo necessaria alla configurazione del processo di verifica automatica dei bandi, per un massimo di 6 bandi nell'arco dell'anno di cui fino a 3 nuovi.","az":"CAMELOT"},{"id":52,"inc":"26SB8","af":"Certificazione UE","amb":"FESR: Gestione e manutenzione correttiva","att":"Attività di importazione e aggiornamento delle spese per ogni proposta e supporto alla reportistica di monitoraggio (ad esempio per disallineamento dati), prevedendo 2 proposte per FESR 21-27 (con un periodo di 20 giorni lavorativi non sovrapposti per ogni proposta in cui raccogliere e gestire gli aggiornamenti) e 1 conto annuale per FESR 21-27 e 1 per FESR 14-20 (con un periodo di 20 giorni lavorativi non sovrapposti per i 2 programmi in cui raccogliere e gestire gli aggiornamenti).","az":"CAMELOT"},{"id":53,"inc":"26SB8","af":"Certificazione UE","amb":"FESR: Gestione e manutenzione correttiva","att":"Supporto a L2 per l'erogazione di 2 sessioni di formazione da 2 ore l'una.","az":"CAMELOT"},{"id":54,"inc":"26SB8","af":"Certificazione UE","amb":"FESR: Gestione e manutenzione correttiva","att":"Gestione, lato esposizione dei dati, di 2 richieste di modifiche, non strutturali (ad esempio inserimento nuove colonne o una modifica del calcolo di colonne già presenti, escludendo revisione della logica generale del report), a report esistenti, da inserire nel piano trimestrale di rilasci. - Manutenzione correttiva di anomalie del software rispetto alle specifiche concordate, con gestione di anomalie bloccanti entro 5 giorni lavorativi dalla segnalzione e gestione fino a 2 anomalie nell'arco dell'anno  da inserire nel piano trimestrale di rilasci.","az":"CAMELOT"},{"id":55,"inc":"26SB8","af":"Certificazione UE","amb":"FESR: Manutenzione  evolutiva","att":"Manutenzione evolutiva per un massimo di 2 piccole MEV (comprese rilavorazioni per specifiche già concordate) da massimo 12 giorni lavorativi da inserire nel piano trimestrale di rilasci.","az":"CAMELOT"},{"id":56,"inc":"26SB8","af":"Certificazione UE","amb":"FSE: Gestione e manutenzione correttiva","att":"Attività di importazione e aggiornamento delle spese per ogni proposta e supporto alla reportistica di monitoraggio (ad esempio per disallineamento dati), prevedendo 2 proposte per FSE+ 21-27 (con un periodo di 20 giorni lavorativi non sovrapposti per ogni proposta in cui raccogliere e gestire gli aggiornamenti) e 1 conto annuale per FSE+ 21-27 e 1 per FSE 14-20 (con un periodo di 20 giorni lavorativi non sovrapposti per i 2 programmi in cui raccogliere e gestire gli aggiornamenti).","az":"CAMELOT"},{"id":57,"inc":"26SB8","af":"Certificazione UE","amb":"FSE: Gestione e manutenzione correttiva","att":"Supporto a L2 per l'erogazione di 1 sessione di formazione da 2 ore.","az":"CAMELOT"},{"id":58,"inc":"26SB8","af":"Certificazione UE","amb":"FSE: Gestione e manutenzione correttiva","att":"Gestione, lato esposizione dei dati, di 2 richieste di modifiche, non strutturali (ad esempio inserimento nuove colonne o una modifica del calcolo di colonne già presenti, escludendo revisione della logica generale del report), a report esistenti, da inserire nel piano trimestrale di rilasci.","az":"CAMELOT"},{"id":59,"inc":"26SB8","af":"Certificazione UE","amb":"FSE: Gestione e manutenzione correttiva","att":"Manutenzione correttiva di anomalie del software rispetto alle specifiche concordate, con gestione di anomalie bloccanti entro 5 giorni lavorativi dalla segnalazione e gestione fino a 2 anomalie nell'arco dell'anno da inserire nel piano trimestrale di rilasci.","az":"CAMELOT"},{"id":60,"inc":"26SB8","af":"Certificazione UE","amb":"FSE: Manutenzione evolutiva","att":"Manutenzione evolutiva per un massimo di 2 piccole MEV (comprese rilavorazioni per specifiche già concordate) da massimo 12 giorni lavorativi da inserire nel piano trimestrale di rilasci.","az":"CAMELOT"},{"id":61,"inc":"26SB8","af":"Controlli","amb":"Gestione CONT per programmi UE","att":"Interventi di bonifica ai dati per controlli già validati ma con errori di inserimento nei dati: 2 al mese, per un totale di 24, da eseguire non più di una volta al mese.","az":"CAMELOT"},{"id":62,"inc":"26SB8","af":"Controlli","amb":"Gestione CONT per programmi UE","att":"Supporto a L2 per l'erogazione di 4 sessioni di formazione da 2 ore l'una, con registrazione delle sessioni e messa a disposizione delle registrazioni.","az":"CAMELOT"},{"id":63,"inc":"26SB8","af":"Controlli","amb":"Manutenzione CONT per programmi UE","att":"Gestione di 2 richieste di modifiche, non strutturali (ad esempio inserimento nuove colonne o una modifica del calcolo di colonne già presenti, escludendo revisione della logica generale del report), a report esistenti, da inserire nel piano bimestrale di rilasci.","az":"CAMELOT"},{"id":64,"inc":"26SB8","af":"Controlli","amb":"Manutenzione CONT per programmi UE","att":"Manutenzione evolutiva per un massimo di 4 piccole MEV (comprese rilavorazioni per specifiche già concordate) da massimo 12 giorni lavorativi da inserire nel piano trimestrale di rilasci.","az":"CAMELOT"},{"id":65,"inc":"26SB8","af":"Controlli","amb":"Evolutive nuovo Modulo Controlli 2025 (post-formazione) - donwload complessivo","att":"tasto download complessivo tab documenti in controlli ispettivi e non ispettivi;","az":"CAMELOT"},{"id":66,"inc":"26SB8","af":"Controlli","amb":"Evolutive nuovo Modulo Controlli 2025 (post-formazione) - nuovi filtri","att":"integrazione filtri di ricerca in funzionalità \"aggiungi rilievi\": CF, denominazione, id operazione;","az":"CAMELOT"},{"id":67,"inc":"26SB8","af":"Controlli","amb":"Evolutive nuovo Modulo Controlli 2025 (post-formazione) - estrazione elenco rilievi","att":"estrazione Excel dell'elenco rilievi su spesa in controlli I livello;","az":"CAMELOT"},{"id":68,"inc":"26SB8","af":"Controlli","amb":"Revisione delle logiche per la programmazione 21-27 legate all'assenza di una proposta finale e intermedia fisse","att":"Modificare gli accordion in sola Spesa certificata e non certificata","az":"CAMELOT"},{"id":69,"inc":"26SB8","af":"Controlli","amb":"Evolutive Controlli vs Bandificio. Aggiornamento semiautomatico rendicontazione back-office","att":"Aggiornamento semiautomatico rendicontazione back-office. Lato controlli l'attività consisterà nell'esporre le informazioni al bandificio e mandare mail di notifica al Responsabile procedimento","az":"CAMELOT"},{"id":70,"inc":"26SB8","af":"Controlli","amb":"Gestione ritiri su Strumenti finanziari - lato CONT","att":"doppia opzione di tracciamento controlli su spese certificate o da certificare su SF padre e pratiche figlie","az":"CAMELOT"},{"id":71,"inc":"26SB8","af":"Controlli","amb":"Syndication simulazione","att":"Sincronizzazione delle tabelle AGORA relativamente agli oggetti certificbaili entrati in simulazione","az":"CAMELOT"},{"id":72,"inc":"26SB8","af":"Controlli","amb":"Migrazione dei dati e dei documenti da AGORA","att":"Migrazione dei dati e dei documenti da AGORA al nuovo Modulo in sola visualizzazione per la 14-20","az":"CAMELOT"},{"id":73,"inc":"26SB8","af":"controlli desk","amb":"Procedura semi-automatico di calcolo del rischio e il campionamento","att":"Applicazione ogni 20 giorni della procedura semi-automatica fuori linea per il calcolo del rischio e il campionamento e ogni settimana per eventuali ricampionamenti per bandi FESR 21-27, applicando gli algoritmi implementati nel 2025 secondo il documento regionale condiviso, con fornitura di file a bandificio per il caricamento sulle pratiche.","az":"CAMELOT"},{"id":74,"inc":"26SB8","af":"Programmazione","amb":"Gestione I semestre per programmi UE","att":"Interventi di bonifiche a DB tramite script per funzionalità non permesse o non ancora permesse a GUI: 3 interventi da integrare nel piano trimestrale dei rilasci","az":"CAMELOT"},{"id":75,"inc":"26SB8","af":"Programmazione","amb":"Manutenzione evolutiva I semestre per programmi UE","att":"Gestione, lato strutturazione e popolamento del report,  di 3 richieste di modifiche, non strutturali (ad esempio inserimento nuove colonne o una modifica del calcolo di colonne già presenti, escludendo revisione della logica generale del report), a report esistenti, da inserire nel piano trimestrale di rilasci.","az":"CAMELOT"},{"id":76,"inc":"26SB8","af":"Programmazione","amb":"Manutenzione evolutiva I semestre per programmi UE","att":"Manutenzione evolutiva per un massimo di 2 MEV da massimo 12 giorni lavorativi da inserire nel piano trimestrale di rilasci.","az":"CAMELOT"},{"id":77,"inc":"26SB8","af":"Programmazione","amb":"Gestione II semestre per programmi UE","att":"Interventi di bonifiche a DB tramite script per funzionalità non permesse o non ancora permesse a GUI: 3 interventi da integrare nel piano trimestrale dei rilasci","az":"CAMELOT"},{"id":78,"inc":"26SB8","af":"Programmazione","amb":"Manutenzione evolutiva II semestre per programmi UE","att":"Gestione, lato strutturazione e popolamento del report,  di 3 richieste di modifiche, non strutturali (ad esempio inserimento nuove colonne o una modifica del calcolo di colonne già presenti, escludendo revisione della logica generale del report), a report esistenti, da inserire nel piano trimestrale di rilasci.","az":"CAMELOT"},{"id":79,"inc":"26SB8","af":"Programmazione","amb":"Manutenzione evolutiva II semestre per programmi UE","att":"Manutenzione evolutiva per un massimo di 2 MEV da massimo 12 giorni lavorativi da inserire nel piano trimestrale di rilasci.","az":"CAMELOT"},{"id":80,"inc":"26SB8","af":"Programmazione","amb":"Allentamento vincoli rispetto al prenotato","att":"Allentamento vincoli rispetto al prenotato nell'aggiornamento del programmato, trasformando l'errore bloccante in un warning parametrico mostrato nella tabella a GUI (versione minimale poco usabile già gestita nel 2025)","az":"CAMELOT"},{"id":81,"inc":"26SB8","af":"Programmazione","amb":"Report strumenti finanziari","att":"Implementazione di parte dell'elaborazione e rendering in formato excel dei 4 report parametrici degli strumenti finanziari, e integrazione con le API di CERT","az":"CAMELOT"},{"id":82,"inc":"26SB8","af":"Programmazione","amb":"Ottimizzazione usabilità Gestione DGR","att":"Import massivo degli importi suddivisi per azione-capitolo-anno nel modulo Gestione DGR","az":"CAMELOT"},{"id":83,"inc":"26SB8","af":"Programmazione","amb":"Ottimizzazione usabilità Gestione DGR","att":"Inserimento filtri e ordinamento su azione, capitolo, anno in fase di creazione/modifica DGR","az":"CAMELOT"},{"id":84,"inc":"26SB8","af":"Normalizzazione","amb":"normalizzazione dei dati delle pratiche / domande degli strumenti / bandi / procedimenti realizzati sulla piattaforma BeS per le attività UE","att":"analisi di esigenze specifiche per l'individuazione e il recupero di informazioni raccolte dal sistema BeS","az":"ENG"},{"id":85,"inc":"26SB8","af":"Normalizzazione","amb":"normalizzazione dei dati delle pratiche / domande degli strumenti / bandi / procedimenti realizzati sulla piattaforma BeS per le attività UE","att":"analisi impatti dei wp e delle mev delle aree funzionali del sistema BeS sul modello normalizzato dei dati","az":"ENG"},{"id":86,"inc":"26SB8","af":"Normalizzazione","amb":"normalizzazione dei dati delle pratiche / domande degli strumenti / bandi / procedimenti realizzati sulla piattaforma BeS per le attività UE","att":"progettazione adeguamento continuo del modello dati uniformato/unificato","az":"ENG"},{"id":87,"inc":"26SB8","af":"Normalizzazione","amb":"normalizzazione dei dati delle pratiche / domande degli strumenti / bandi / procedimenti realizzati sulla piattaforma BeS per le attività UE","att":"defniizione delle regole di warning delle consistenze dei dati","az":"ENG"},{"id":88,"inc":"26SB8","af":"Normalizzazione","amb":"normalizzazione dei dati delle pratiche / domande degli strumenti / bandi / procedimenti realizzati sulla piattaforma BeS per le attività UE","att":"produzione di deliverable documentali che descrivano quanto sopra","az":"ENG"},{"id":89,"inc":"26SB8","af":"Normalizzazione","amb":"normalizzazione dei dati delle pratiche / domande degli strumenti / bandi / procedimenti realizzati sulla piattaforma BeS per le attività UE","att":"realizzazione di estrazione dati e reportistiche ad hoc per il cliente o per le varie aree / consumer","az":"ENG"},{"id":90,"inc":"26SB8","af":"Normalizzazione","amb":"normalizzazione dei dati delle pratiche / domande degli strumenti / bandi / procedimenti realizzati sulla piattaforma BeS per le attività UE","att":"analisi e verifica delle incongruenze e indirizzamento della loro risoluzione","az":"ENG"},{"id":91,"inc":"26SB8","af":"Normalizzazione","amb":"normalizzazione dei dati delle pratiche / domande degli strumenti / bandi / procedimenti realizzati sulla piattaforma BeS per le attività UE","att":"consulenza per partner, cliente Aria e gdl sul dominio seguito","az":"ENG"},{"id":92,"inc":"26SB8","af":"Normalizzazione","amb":"normalizzazione dei dati delle pratiche / domande degli strumenti / bandi / procedimenti realizzati sulla piattaforma BeS per le attività UE","att":"organizzazione del lavoro del gruppo di normalizzazione","az":"ENG"},{"id":93,"inc":"26SB8","af":"amm di sistema","amb":"Aggiornamento sorgenti","att":"Manutenzione e versionamento dei sorgenti applicativi nei repository di riferimento","az":"Elite/Digital360"},{"id":94,"inc":"26SB8","af":"amm di sistema","amb":"Aggiornamento sorgenti","att":"Aggiornamento delle librerie e delle dipendenze nel rispetto delle policy di sicurezza","az":"Elite/Digital360"},{"id":95,"inc":"26SB8","af":"amm di sistema","amb":"Aggiornamento sorgenti","att":"Allineamento dei sorgenti tra ambienti di sviluppo, collaudo e produzione","az":"Elite/Digital360"},{"id":96,"inc":"26SB8","af":"amm di sistema","amb":"Aggiornamento sorgenti","att":"Tracciamento delle modifiche e produzione della documentazione tecnica associata","az":"Elite/Digital360"},{"id":97,"inc":"26SB8","af":"amm di sistema","amb":"Manutenzione degli ambienti produttivi e di sviluppo","att":"Presidio operativo continuativo degli ambienti di produzione e sviluppo","az":"B.C."},{"id":98,"inc":"26SB8","af":"amm di sistema","amb":"Manutenzione degli ambienti produttivi e di sviluppo","att":"Manutenzione ordinaria, patching e aggiornamenti delle componenti di piattaforma","az":"B.C."},{"id":99,"inc":"26SB8","af":"amm di sistema","amb":"Manutenzione degli ambienti produttivi e di sviluppo","att":"Monitoraggio delle performance e gestione delle anomalie infrastrutturali","az":"B.C."},{"id":100,"inc":"26SB8","af":"amm di sistema","amb":"Manutenzione degli ambienti produttivi e di sviluppo","att":"Allineamento delle configurazioni tra gli ambienti nel rispetto delle policy operative","az":"B.C."},{"id":101,"inc":"26SB8","af":"amm di sistema","amb":"Piattaforma - Coordinamento attività trasversali e supporto alla gestione","att":"Coordinamento delle attività trasversali tra le aree funzionali della piattaforma","az":"B.C."},{"id":102,"inc":"26SB8","af":"amm di sistema","amb":"Piattaforma - Coordinamento attività trasversali e supporto alla gestione","att":"Presidio SAL e riunioni ordinarie di coordinamento con RL e referenti tecnici","az":"B.C."},{"id":103,"inc":"26SB8","af":"amm di sistema","amb":"Piattaforma - Coordinamento attività trasversali e supporto alla gestione","att":"Gestione delle dipendenze e supporto al piano operativo complessivo","az":"B.C."},{"id":104,"inc":"26SB8","af":"amm di sistema","amb":"Piattaforma - Coordinamento attività trasversali e supporto alla gestione","att":"Reportistica di sintesi sull'avanzamento e sulle criticità di piattaforma","az":"B.C."},{"id":105,"inc":"26SB8","af":"Certificazione","amb":"Inserimento filtro \"Titolo Domanda\" in Simulazione","att":"Aggiunta del filtro nella pagina di simulazione per la programamzione 21-27 sul Titolo domanda","az":"CAMELOT"},{"id":106,"inc":"26SB8","af":"Certificazione","amb":"Aggiornamento API vs Scheda pratica per gestire certificato su pratica slave","att":"RL ha richiesto la possibilità di visulizzare all'interno del tab Certificazione della scheda pratica delle pratiche slave il dettaglio delle spese certificate collegate allo SF master di competenza. Per poter effettuare questa modifica di visualizzazione lato Scheda pratica, Certificazione dovrà fornire delle API di dettagio con l'incazione delle spese certificate collegate alle pratiche slave (anche se la spesa nel modulo di certificazione risulterà certificata tutta sullo SF).","az":"CAMELOT"},{"id":107,"inc":"26SB8","af":"Certificazione","amb":"Report Strumenti finanziari","att":"Predisposizione dei dati in parte già pre-elaborati e loro esposizione verso APMS per la realizzazione completa dei  report SF integrata con i riferimenti di CERT","az":"CAMELOT"},{"id":108,"inc":"26SB8","af":"Certificazione","amb":"Adeguamenti documenti proposta certificazione","att":"Appendice 2  (condizioni abilitanti) e allegato 4 (anticipi)","az":"CAMELOT"},{"id":109,"inc":"26SB8","af":"Certificazione","amb":"Gestione ritiri su Strumenti finanziari - lato CERT","att":"Gestione ritiri su Strumenti finanziari - lato CERT","az":"CAMELOT"},{"id":110,"inc":"26SB8","af":"Certificazione","amb":"Possibilità di eliminare proposta RDP","att":"Si richiede di implementare per il modulo di certificazione delle programmazioni 21-27 la possibilità di eliminare le proposte di certificazione in stato \"In carico a RdP\". In seguito all'eliminazione tutti gli oggetti certificabili dovranno tornare nello stato precedente (in simulazione)","az":"CAMELOT"},{"id":111,"inc":"26SB8","af":"Certificazione","amb":"Evolutive Certificazione - Abilitazione permessi di scrittura FRL sulle proposte in lavorazione (in carico a RdA) e su tutte le proposte certificate","att":"Abilitazione permessi di scrittura FRL sulle proposte in lavorazione (in carico a RdA) e su tutte le proposte certificate","az":"CAMELOT"},{"id":112,"inc":"26SB8","af":"Certificazione","amb":"Appendice 4 Anticipi in aiuto di stato non de minimis - Proposte programmi 21-27","att":"RL ha richiesto di modificare la logica dell’appendice degli anticipi in aiuto di stato non de minimis prevista per le proposte di certificazione (e quindi la relativa appendice dei conti annuali).","az":"CAMELOT"},{"id":113,"inc":"26SB8","af":"Certificazione","amb":"Appendice 4 Anticipi in aiuto di stato non de minimis - Proposte programmi 21-27","att":"Per il bando  RLP12023030003 PR FESR 2021-2027 Bando Sostegno alla competitività delle strutture ricettive alberghiere e non alberghiere, RL ha liquidato degli anticipi superiori alla massima quota certificabile vs la UE con tipologia anticipo, quindi dovremmo prevedere un’eccezione.","az":"CAMELOT"},{"id":114,"inc":"26SB8","af":"Certificazione","amb":"Adeguamenti Conti annuali 21-27","att":"Adeguamenti delle diverse appendici dei conti annuali per la programmazione 21-27 e inserimento di una nuova appendice","az":"CAMELOT"},{"id":115,"inc":"26SB8","af":"Certificazione","amb":"Aggiunta nuova azione contabile","att":"Aggiunta nuova azione contabile \"Recupero contabile tramite soggetti terzi\" per conrolli infocamere","az":"CAMELOT"},{"id":116,"inc":"26SB8","af":"PROUE","amb":"Portali Open 2.0 - PROUE","att":"Partecipazione agli incontri di allineamento del Tavolo PROUE","az":"Elite/Digital360"},{"id":117,"inc":"26SB8","af":"PROUE","amb":"Portali Open 2.0 - PROUE","att":"Raccolta esigenze e demand management con RL per richiesta e valutazione di MEV","az":"Elite/Digital360"},{"id":118,"inc":"26SB8","af":"PROUE","amb":"Portali Open 2.0 - PROUE","att":"Erogazione di sessioni di formazione per un massimo di 10h","az":"Elite/Digital360"},{"id":119,"inc":"26SB8","af":"PROUE","amb":"Portali Open 2.0 - PROUE","att":"Manutenzione correttiva di anomalie del sistema rispetto alle specifiche concordate e validate da referenti regionali.","az":"Elite/Digital360"},{"id":120,"inc":"26SB8","af":"PROUE","amb":"Portali Open 2.0 - PROUE","att":"Manutenzione evolutiva (comprese rilavorazioni per specifiche già concordate) per un massimo 20 giorni lavorativi, da inserire nel piano trimestrale di rilasci","az":"Elite/Digital360"},{"id":121,"inc":"26SB8","af":"Trasversale","amb":"Coordinamento tecnico, piano di lavoro e supporto architetturale per attività di sviluppo e gestione legate alla programmazione europea","att":"Valutazione preliminare e pianificazione delle attività, con assegnazione delle priorità e allocazione dei team di lavoro.","az":"Elite/Digital360"},{"id":122,"inc":"26SB8","af":"Trasversale","amb":"Coordinamento tecnico, piano di lavoro e supporto architetturale per attività di sviluppo e gestione legate alla programmazione europea","att":"Documentazione delle configurazioni e dei vincoli non funzionali (sicurezza, performance, disponibilità, capacità,piani di disaster recovery)","az":"Elite/Digital360"},{"id":123,"inc":"26SB8","af":"Trasversale","amb":"Coordinamento tecnico, piano di lavoro e supporto architetturale per attività di sviluppo e gestione legate alla programmazione europea","att":"Mappatura dei processi critici delle aree gestite, con evidenza dei principali pain point; valutazione dello stato dell’arte rispetto a standard e linee guida (separazione dei livelli, osservabilità, resilienza,gestione delle configurazioni, qualità del codice, debito tecnico)","az":"Elite/Digital360"},{"id":124,"inc":"26SB8","af":"Trasversale","amb":"Coordinamento tecnico, piano di lavoro e supporto architetturale per attività di sviluppo e gestione legate alla programmazione europea","att":"Identificazione di rischi, colli di bottiglia e quick win per migliorare l’efficienza e la resilienza della piattaforma","az":"Elite/Digital360"},{"id":125,"inc":"26SB8","af":"Trasversale","amb":"Supporto post-requisitazione, post-rilascio, formazione e reportistica ad hoc in ambiente di Produzione","att":"Supporto agli utenti nella fase post-requisitazione e post-rilascio","az":"B.C."},{"id":126,"inc":"26SB8","af":"Trasversale","amb":"Supporto post-requisitazione, post-rilascio, formazione e reportistica ad hoc in ambiente di Produzione","att":"Erogazione di sessioni di formazione e affiancamento operativo sui nuovi rilasci","az":"B.C."},{"id":127,"inc":"26SB8","af":"Trasversale","amb":"Supporto post-requisitazione, post-rilascio, formazione e reportistica ad hoc in ambiente di Produzione","att":"Produzione di reportistica ad hoc su richiesta degli stakeholder","az":"B.C."},{"id":128,"inc":"26SB8","af":"Trasversale","amb":"Supporto post-requisitazione, post-rilascio, formazione e reportistica ad hoc in ambiente di Produzione","att":"Presidio sulle anomalie post go-live e gestione delle azioni correttive","az":"B.C."},{"id":129,"inc":"26SB8","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 2 rilasci mensili","att":"Pianificazione e coordinamento dei rilasci secondo il calendario operativo concordato","az":"B.C."},{"id":130,"inc":"26SB8","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 2 rilasci mensili","att":"Esecuzione di n. 2 rilasci mensili in ambiente di Produzione nel rispetto degli SLA contrattuali","az":"B.C."},{"id":131,"inc":"26SB8","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 2 rilasci mensili","att":"Presidio delle attività di pre-rilascio, deploy e verifica post-rilascio","az":"B.C."},{"id":132,"inc":"26SB8","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 2 rilasci mensili","att":"Gestione del rollback e delle azioni correttive in caso di anomalie riscontrate","az":"B.C."},{"id":133,"inc":"26SB8","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 8 rilasci mensili, in linea con il volume medio dei rilasci 2025","att":"Pianificazione e coordinamento dei rilasci secondo il calendario operativo concordato","az":"B.C."},{"id":134,"inc":"26SB8","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 8 rilasci mensili, in linea con il volume medio dei rilasci 2025","att":"Esecuzione di n. 8 rilasci mensili in ambiente di Produzione nel rispetto degli SLA contrattuali","az":"B.C."},{"id":135,"inc":"26SB8","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 8 rilasci mensili, in linea con il volume medio dei rilasci 2025","att":"Presidio delle attività di pre-rilascio, deploy e verifica post-rilascio","az":"B.C."},{"id":136,"inc":"26SB8","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 8 rilasci mensili, in linea con il volume medio dei rilasci 2025","att":"Gestione del rollback e delle azioni correttive in caso di anomalie riscontrate","az":"B.C."},{"id":137,"inc":"26SB8","af":"GSAP","amb":"Analisi e sviluppo di evolutive per la convergenza e l'evoluzione del modulo di gestione degli strumenti attuativi nel contesto delle attività di convergenza e catalogo unico","att":"L'attività include lo sviluppo di evolutive del modulo GSAP funzionali alla convergenza e all'integrazione con il nuovo PRL, in ottica di evoluzione di BeS verso il \"catalogo unico\" per bandi, procedimenti e altri servizi regionali:","az":"Elite/Digital360"},{"id":138,"inc":"26SB8","af":"GSAP","amb":"Analisi e sviluppo di evolutive per la convergenza e l'evoluzione del modulo di gestione degli strumenti attuativi nel contesto delle attività di convergenza e catalogo unico","att":"Adeguamento delle tassonomie per allineamento a nuovo portale regione (necessita soluzione per gestione SEO di corrispondenza con le tematiche precedenti)","az":"Elite/Digital360"},{"id":139,"inc":"26SB8","af":"GSAP","amb":"Analisi e sviluppo di evolutive per la convergenza e l'evoluzione del modulo di gestione degli strumenti attuativi nel contesto delle attività di convergenza e catalogo unico","att":"Integrazione nuovo PRL - BeS | Motore di ricerca e gestione filtro data","az":"Elite/Digital360"},{"id":140,"inc":"26SB8","af":"GSAP","amb":"Analisi e sviluppo di evolutive per la convergenza e l'evoluzione del modulo di gestione degli strumenti attuativi nel contesto delle attività di convergenza e catalogo unico","att":"Integrazione nuovo PRL - BeS | Importazione informazione redazionale da nuovo PRL e adeguamento descrizione servizi su vetrina BeS","az":"Elite/Digital360"},{"id":141,"inc":"26SB4","af":"GSAP","amb":"Analisi e sviluppo di evolutive nell'ambito dell'area funzionale di gestione degli strumenti attuativi","att":"Le evolutive software del modulo applicativo prevedono:","az":"Elite/Digital360"},{"id":142,"inc":"26SB4","af":"GSAP","amb":"Analisi e sviluppo di evolutive nell'ambito dell'area funzionale di gestione degli strumenti attuativi","att":"Informativa ATQM 01.25 - Accessibilità e Usabilità e la nuova direttiva europea","az":"Elite/Digital360"},{"id":143,"inc":"26SB4","af":"GSAP","amb":"Analisi e sviluppo di evolutive nell'ambito dell'area funzionale di gestione degli strumenti attuativi","att":"Esclusività - pulsante prendi in carico (bandi, procedimenti)","az":"Elite/Digital360"},{"id":144,"inc":"26SB4","af":"GSAP","amb":"Analisi e sviluppo di evolutive nell'ambito dell'area funzionale di gestione degli strumenti attuativi","att":"Porting della funzionalità SF da Procedimenti a microservizio nuovo GSAP con gestione DGR interfacciamento APMS","az":"Elite/Digital360"},{"id":145,"inc":"26SB4","af":"GSAP","amb":"Analisi e sviluppo di evolutive nell'ambito dell'area funzionale di gestione degli strumenti attuativi","att":"Interventi dotazione finanziaria","az":"Elite/Digital360"},{"id":146,"inc":"26SB4","af":"GSAP","amb":"Analisi e sviluppo di evolutive nell'ambito dell'area funzionale di gestione degli strumenti attuativi","att":"Gestione quadro Voci di Costo in GSAP (WP 5.86)","az":"Elite/Digital360"},{"id":147,"inc":"26SB4","af":"GSAP","amb":"Presidio tecnico e funzionale e gestione dell'area funzionale di gestione strumenti attuativi (GSAP)","att":"Presidio SAL e riunioni ordinarie di progetto (SAL settimanali, incontri con Regione, etc.)","az":"Elite/Digital360"},{"id":148,"inc":"26SB4","af":"GSAP","amb":"Presidio tecnico e funzionale e gestione dell'area funzionale di gestione strumenti attuativi (GSAP)","att":"Gestione del piano operativo di lavoro dell’Area Funzionale","az":"Elite/Digital360"},{"id":149,"inc":"26SB4","af":"GSAP","amb":"Presidio tecnico e funzionale e gestione dell'area funzionale di gestione strumenti attuativi (GSAP)","att":"Analisi preliminare e demand management per MEV","az":"Elite/Digital360"},{"id":150,"inc":"26SB4","af":"GSAP","amb":"Presidio tecnico e funzionale e gestione dell'area funzionale di gestione strumenti attuativi (GSAP)","att":"Presa in carico e analisi preliminare anomalie","az":"Elite/Digital360"},{"id":151,"inc":"26SB4","af":"GSAP","amb":"Presidio tecnico e funzionale e gestione dell'area funzionale di gestione strumenti attuativi (GSAP)","att":"Risoluzione anomalie derivanti da rilasci e sviluppi dalla 25.X in avanti nei tempi previsti dagli SLA contrattuali","az":"Elite/Digital360"},{"id":152,"inc":"26SB4","af":"GSAP","amb":"Presidio tecnico e funzionale e gestione dell'area funzionale di gestione strumenti attuativi (GSAP)","att":"Sviluppo piccole MEV (< 10 gg) fino ad un massimo di 2 al mese.","az":"Elite/Digital360"},{"id":153,"inc":"26SB4","af":"GSAP","amb":"Presidio tecnico e funzionale e gestione dell'area funzionale di gestione strumenti attuativi (GSAP)","att":"Risoluzione di anomalie relative a sviluppi derivanti da attività di integrazione, fino a un massimo di 1 intervento al mese","az":"Elite/Digital360"},{"id":154,"inc":"26SB4","af":"BeB","amb":"Evolutive in ambito BEB e integrazioni con sistemi terzi","att":"Analisi, progettazione ed eventuale evoluzione dell'integrazione con sistemi nazionali e regionali (es. PARIX, SIREAL 2.0) e realizzazione di interventi evolutivi sul BEB per l'esposizione di informazioni verso servizi di piattaforme nazionali nell'ambito della piattaforma legacy.o di BeS++. Analisi e progettazione di evolutive richieste nell'ambito dei Servizi Abitativi. Analisi su inforamtiva ATQM 01.25 su accessibilità e usabilitàe. valutazioni di impatto.","az":"Elite/Digital360"},{"id":155,"inc":"26SB4","af":"BeB","amb":"Presidio tecnico e gestione dell'area funzionale Business Entity Broker (BEB)","att":"Presidio SAL e riunioni ordinarie di progetto (SAL settimanali, incontri con Regione, etc.) per le AF in ambito","az":"Elite/Digital360"},{"id":156,"inc":"26SB4","af":"BeB","amb":"Presidio tecnico e gestione dell'area funzionale Business Entity Broker (BEB)","att":"Gestione del piano operativo di lavoro delle Aree Funzionali","az":"Elite/Digital360"},{"id":157,"inc":"26SB4","af":"BeB","amb":"Presidio tecnico e gestione dell'area funzionale Business Entity Broker (BEB)","att":"Presa in carico e analisi preliminare anomalie BEB","az":"Elite/Digital360"},{"id":158,"inc":"26SB4","af":"BeB","amb":"Presidio tecnico e gestione dell'area funzionale Business Entity Broker (BEB)","att":"Risoluzione anomalie derivanti da rilasci e sviluppi dalla 25.X in avanti nei tempi previsti dagli SLA contrattuali","az":"Elite/Digital360"},{"id":159,"inc":"26SB4","af":"BeB","amb":"Presidio tecnico e gestione dell'area funzionale Business Entity Broker (BEB)","att":"Risoluzione di anomalie relative a sviluppi derivanti da attività di integrazione, fino a un massimo di 1 intervento al mese","az":"Elite/Digital360"},{"id":160,"inc":"26SB4","af":"BeB","amb":"Piccole MEV per area funzionale Business Entity Broker (BEB)","att":"Analisi preliminare e demand management per MEV BEB. Sviluppo piccole MEV (< 10 gg) fino ad un massimo di 1 al mese.","az":"Elite/Digital360"},{"id":161,"inc":"26SB4","af":"Trasversale","amb":"Evoluzione degli strumenti di gestione della privacy in coordinamento con il DPO","att":"Analisi dei requisiti privacy in raccordo con il DPO e recepimento delle indicazioni normative","az":"B.C."},{"id":162,"inc":"26SB4","af":"Trasversale","amb":"Evoluzione degli strumenti di gestione della privacy in coordinamento con il DPO","att":"Progettazione e sviluppo delle evolutive degli strumenti di gestione del trattamento dati","az":"B.C."},{"id":163,"inc":"26SB4","af":"Trasversale","amb":"Evoluzione degli strumenti di gestione della privacy in coordinamento con il DPO","att":"Verifica di conformità e supporto al collaudo delle nuove funzionalità","az":"B.C."},{"id":164,"inc":"26SB4","af":"Trasversale","amb":"Adeguamenti normativi - nuove modalità di Fascicolazione e Conservazione a Norma","att":"Analisi delle nuove regole di fascicolazione e dei requisiti di conservazione a norma","az":"B.C."},{"id":165,"inc":"26SB4","af":"Trasversale","amb":"Adeguamenti normativi - nuove modalità di Fascicolazione e Conservazione a Norma","att":"Evoluzione dei moduli documentali e dei metadati per la conformità","az":"B.C."},{"id":166,"inc":"26SB4","af":"Trasversale","amb":"Adeguamenti normativi - nuove modalità di Fascicolazione e Conservazione a Norma","att":"Integrazione con il sistema di Conservazione e adeguamento dei processi di versamento","az":"B.C."},{"id":167,"inc":"26SB4","af":"Trasversale","amb":"Adeguamenti normativi - nuove modalità di Fascicolazione e Conservazione a Norma","att":"Verifica di conformità e supporto al passaggio in produzione","az":"B.C."},{"id":168,"inc":"26SB4","af":"Trasversale","amb":"Coordinamento e supporto alla gestione architetturale nell'ambito delle attività di convergenza","att":"Pianificazione e prioritizzazione delle attività di sviluppo in ottica di convergenza, con allocazione dei team sui workstream rilevanti.","az":"Elite/Digital360"},{"id":169,"inc":"26SB4","af":"Trasversale","amb":"Coordinamento e supporto alla gestione architetturale nell'ambito delle attività di convergenza","att":"Documentazione delle configurazioni e dei vincoli non funzionali (sicurezza, performance, disponibilità, disaster recovery) dei componenti in perimetro.","az":"Elite/Digital360"},{"id":170,"inc":"26SB4","af":"Trasversale","amb":"Coordinamento e supporto alla gestione architetturale nell'ambito delle attività di convergenza","att":"Mappatura dei processi critici con evidenza dei pain point e valutazione dello stato dell'arte rispetto a standard di qualità (osservabilità, resilienza, debito tecnico, gestione delle configurazioni).","az":"Elite/Digital360"},{"id":171,"inc":"26SB4","af":"Trasversale","amb":"Coordinamento e supporto alla gestione architetturale nell'ambito delle attività di convergenza","att":"Identificazione di rischi, colli di bottiglia e quick win per migliorare efficienza e resilienza nel percorso di convergenza.","az":"Elite/Digital360"},{"id":172,"inc":"26SB4","af":"Trasversale","amb":"Coordinamento e supporto alla gestione architetturale nell'ambito delle attività di convergenza","att":"Partecipazione ai SAL e ai tavoli tecnici con contributo alla governance architetturale di progetto.","az":"Elite/Digital360"},{"id":173,"inc":"26SB4","af":"Trasversale","amb":"Supporto specialistico all'analisi delle richieste di semplificazione e standardizzazione della gesitone di bandi legati alla programmazione europea","att":"Servizio di program management per i servizi e le attività di sviluppo, a supporto del demand management, delle attività di pianificazione e gestione del piano di sviluppo di BeS, delle interazioni con RL e altri stakeholder nell'ambito della convergenza e dell'evoluzione della piattaforma secondo le linee strategiche regionali. Presidio dei SAL contrattuali e operativi di Bes e con i sistemi informativi,","az":"Elite/Digital360"},{"id":174,"inc":"26SB4","af":"Trasversale","amb":"Attività di sviluppo evolutivo, per un totale di n. 4 PMEV/mese","att":"Analisi preliminare e demand management per le MEV in portafoglio","az":"B.C."},{"id":175,"inc":"26SB4","af":"Trasversale","amb":"Attività di sviluppo evolutivo, per un totale di n. 4 PMEV/mese","att":"Realizzazione di n. 4 PMEV/mese secondo il piano operativo concordato","az":"B.C."},{"id":176,"inc":"26SB4","af":"Trasversale","amb":"Attività di sviluppo evolutivo, per un totale di n. 4 PMEV/mese","att":"Coordinamento con le aree funzionali e gestione delle dipendenze applicative","az":"B.C."},{"id":177,"inc":"26SB4","af":"Trasversale","amb":"Attività di sviluppo evolutivo, per un totale di n. 4 PMEV/mese","att":"Supporto al collaudo e accompagnamento al rilascio in produzione","az":"B.C."},{"id":178,"inc":"26SB4","af":"Trasversale","amb":"Attività manutentiva e correttiva, per un totale di n. 4 anomalie/mese","att":"Presa in carico e analisi preliminare delle anomalie segnalate","az":"B.C."},{"id":179,"inc":"26SB4","af":"Trasversale","amb":"Attività manutentiva e correttiva, per un totale di n. 4 anomalie/mese","att":"Risoluzione di n. 4 anomalie/mese nei tempi previsti dagli SLA contrattuali","az":"B.C."},{"id":180,"inc":"26SB4","af":"Trasversale","amb":"Attività manutentiva e correttiva, per un totale di n. 4 anomalie/mese","att":"Esecuzione dei test di regressione e rilascio in produzione delle correzioni","az":"B.C."},{"id":181,"inc":"26SB4","af":"Trasversale","amb":"Attività manutentiva e correttiva, per un totale di n. 4 anomalie/mese","att":"Tracciamento delle anomalie e produzione della reportistica di servizio","az":"B.C."},{"id":182,"inc":"26SB4","af":"Trasversale","amb":"Supporto post-requisitazione, post-rilascio, formazione e reportistica ad hoc in ambiente di Produzione","att":"Supporto agli utenti nella fase post-requisitazione e post-rilascio","az":"B.C."},{"id":183,"inc":"26SB4","af":"Trasversale","amb":"Supporto post-requisitazione, post-rilascio, formazione e reportistica ad hoc in ambiente di Produzione","att":"Erogazione di sessioni di formazione e affiancamento operativo sui nuovi rilasci","az":"B.C."},{"id":184,"inc":"26SB4","af":"Trasversale","amb":"Supporto post-requisitazione, post-rilascio, formazione e reportistica ad hoc in ambiente di Produzione","att":"Produzione di reportistica ad hoc su richiesta degli stakeholder","az":"B.C."},{"id":185,"inc":"26SB4","af":"Trasversale","amb":"Supporto post-requisitazione, post-rilascio, formazione e reportistica ad hoc in ambiente di Produzione","att":"Presidio sulle anomalie post go-live e gestione delle azioni correttive","az":"B.C."},{"id":186,"inc":"26SB4","af":"Trasversale","amb":"Integrazione di ulteriori sistemi esterni ad alta complessità pari a n. 2","att":"Analisi dei requisiti di integrazione con n. 2 sistemi esterni ad alta complessità","az":"B.C."},{"id":187,"inc":"26SB4","af":"Trasversale","amb":"Integrazione di ulteriori sistemi esterni ad alta complessità pari a n. 2","att":"Sviluppo delle interfacce e dei flussi di scambio dati richiesti","az":"B.C."},{"id":188,"inc":"26SB4","af":"Trasversale","amb":"Integrazione di ulteriori sistemi esterni ad alta complessità pari a n. 2","att":"Test end-to-end e gestione delle dipendenze con i sistemi controparte","az":"B.C."},{"id":189,"inc":"26SB4","af":"Trasversale","amb":"Integrazione di ulteriori sistemi esterni ad alta complessità pari a n. 2","att":"Supporto al collaudo congiunto e alla messa in esercizio","az":"B.C."},{"id":190,"inc":"26SB4","af":"Trasversale","amb":"Integrazione di strumenti specialistici di esercizio pari a n. 2","att":"Analisi dei requisiti di integrazione con n. 2 strumenti specialistici di esercizio","az":"B.C."},{"id":191,"inc":"26SB4","af":"Trasversale","amb":"Integrazione di strumenti specialistici di esercizio pari a n. 2","att":"Sviluppo delle interfacce e dei meccanismi di raccolta delle metriche operative","az":"B.C."},{"id":192,"inc":"26SB4","af":"Trasversale","amb":"Integrazione di strumenti specialistici di esercizio pari a n. 2","att":"Adeguamento dei processi di monitoraggio e alerting","az":"B.C."},{"id":193,"inc":"26SB4","af":"Trasversale","amb":"Integrazione di strumenti specialistici di esercizio pari a n. 2","att":"Supporto al collaudo e all'avviamento in produzione","az":"B.C."},{"id":194,"inc":"26SB4","af":"Trasversale","amb":"Trasversale","att":"Acquisto licenze Appian","az":"B.C."},{"id":195,"inc":"26SB4","af":"Progettazione","amb":"Adeguamenti normativi - introduzione e adeguamento delle logiche Accrual","att":"Analisi degli impatti normativi sulle logiche contabili di competenza economica","az":"B.C."},{"id":196,"inc":"26SB4","af":"Progettazione","amb":"Adeguamenti normativi - introduzione e adeguamento delle logiche Accrual","att":"Progettazione e sviluppo delle modifiche applicative per il principio di Accrual","az":"B.C."},{"id":197,"inc":"26SB4","af":"Progettazione","amb":"Adeguamenti normativi - introduzione e adeguamento delle logiche Accrual","att":"Allineamento dei flussi di rendicontazione e dei tracciati di interscambio","az":"B.C."},{"id":198,"inc":"26SB4","af":"Progettazione","amb":"Adeguamenti normativi - introduzione e adeguamento delle logiche Accrual","att":"Supporto al test funzionale e all'avviamento in esercizio","az":"B.C."},{"id":199,"inc":"26SB4","af":"Progettazione","amb":"Adeguamenti normativi - adeguamenti richiesti dal Codice Incentivi","att":"Recepimento delle prescrizioni del Codice Incentivi e analisi degli impatti applicativi","az":"B.C."},{"id":200,"inc":"26SB4","af":"Progettazione","amb":"Adeguamenti normativi - adeguamenti richiesti dal Codice Incentivi","att":"Progettazione e sviluppo delle modifiche su procedimenti, anagrafiche e regole di calcolo","az":"B.C."},{"id":201,"inc":"26SB4","af":"Progettazione","amb":"Adeguamenti normativi - adeguamenti richiesti dal Codice Incentivi","att":"Adeguamento dei flussi di rendicontazione e dei controlli automatici","az":"B.C."},{"id":202,"inc":"26SB4","af":"Progettazione","amb":"Adeguamenti normativi - adeguamenti richiesti dal Codice Incentivi","att":"Supporto al collaudo e accompagnamento al rilascio in produzione","az":"B.C."},{"id":203,"inc":"26SB4","af":"Progettazione","amb":"Adeguamenti normativi - allineamento dei flussi contabili e procedurali (es. Atti)","att":"Sviluppo evolutivo per l'allineamento dei processi (es. modulo Atti) alle nuove regole","az":"B.C."},{"id":204,"inc":"26SB4","af":"Progettazione","amb":"Adeguamenti normativi - allineamento dei flussi contabili e procedurali (es. Atti)","att":"Aggiornamento dei tracciati di integrazione con i sistemi contabili a valle","az":"B.C."},{"id":205,"inc":"26SB4","af":"Progettazione","amb":"Adeguamenti normativi - allineamento dei flussi contabili e procedurali (es. Atti)","att":"Verifica end-to-end e supporto al go-live\"","az":"B.C."},{"id":206,"inc":"26SB4","af":"Progettazione","amb":"Adeguamenti normativi - allineamento dei flussi contabili e procedurali (es. Atti)","att":"Sviluppo evolutivo per l'allineamento dei processi (es. modulo Atti) alle nuove regole","az":"B.C."},{"id":207,"inc":"26SB4","af":"Progettazione","amb":"Adeguamenti normativi - allineamento dei flussi contabili e procedurali (es. Atti)","att":"Aggiornamento dei tracciati di integrazione con i sistemi contabili a valle","az":"B.C."},{"id":208,"inc":"26SB4","af":"Progettazione","amb":"Adeguamenti normativi - allineamento dei flussi contabili e procedurali (es. Atti)","att":"Verifica end-to-end e supporto al go-live\"","az":"B.C."},{"id":209,"inc":"26SB4","af":"Progettazione","amb":"Adeguamenti normativi - nuove modalità di Fascicolazione e Conservazione a Norma","att":"Analisi delle nuove regole di fascicolazione e dei requisiti di conservazione a norma","az":"B.C."},{"id":210,"inc":"26SB4","af":"Progettazione","amb":"Adeguamenti normativi - nuove modalità di Fascicolazione e Conservazione a Norma","att":"Evoluzione dei moduli documentali e dei metadati per la conformità","az":"B.C."},{"id":211,"inc":"26SB4","af":"Progettazione","amb":"Adeguamenti normativi - nuove modalità di Fascicolazione e Conservazione a Norma","att":"Integrazione con il sistema di Conservazione e adeguamento dei processi di versamento","az":"B.C."},{"id":212,"inc":"26SB4","af":"Progettazione","amb":"Adeguamenti normativi - nuove modalità di Fascicolazione e Conservazione a Norma","att":"Verifica di conformità e supporto al passaggio in produzione","az":"B.C."},{"id":213,"inc":"26SB4","af":"Atti","amb":"Presidio tecnico e operativo AF Atti per attività di analisi e gestione integrazioni contabil e MEV","att":"Presidio tecnico e operativo rafforzato per la gestione e la manutenzione dell’AF ATTI in particolare in relazione ad attività di integrazione e gestione dei processi amministrativi e contabili","az":"Elite/Digital360"},{"id":214,"inc":"26SB4","af":"Atti","amb":"Presidio tecnico e operativo AF Atti per attività di analisi e gestione integrazioni contabil e MEV","att":"Analisi preliminare e demand management con RL per MEV relative all’AF ATTI e alle integrazioni con sistemi esterni a BeS","az":"Elite/Digital360"},{"id":215,"inc":"26SB4","af":"Atti","amb":"Presidio tecnico e operativo AF Atti per attività di analisi e gestione integrazioni contabil e MEV","att":"Presa in carico e analisi preliminare anomalie relative all’AF ATTI e alle integrazioni, con presidio rafforzato relativamente alle attività di identificazione di problematiche su moduli applicativi e dati","az":"Elite/Digital360"},{"id":216,"inc":"26SB4","af":"Atti","amb":"Supporto tecnico-operativo relativo all'AF ATTI per la gestione di dati e processi relativi a POC e INTERREG","att":"Attività di presidio tecnico e operativo erogato dal team dedicato alla gestione dell'AF ATTI per il monitoraggio e la gestione dei bandi relativi ai programmi POC e INTERREG; attività di analisi e interventi legati ai programmi POC e INTERREG, sia in termini di gestione manutentiva del modulo applicativo, sia di gestione dei dati.","az":"Elite/Digital360"},{"id":217,"inc":"26SB4","af":"Certificazione (NON UE)","amb":"INTERREG: Gestione e Manutenzione","att":"Attività di importazione e aggiornamento delle spese per ogni proposta e supporto alla reportistica di monitoraggio, prevedendo 1 conto annuale per la programmazione 14 -20 (con un periodo di 20 giorni lavorativi in cui raccogliere e gestire gli aggiornamenti).","az":"CAMELOT"},{"id":218,"inc":"26SB4","af":"Certificazione (NON UE)","amb":"INTERREG: Gestione e Manutenzione","att":"Manutenzione correttiva di anomalie del software rispetto alle specifiche concordate, con gestione di anomalie bloccanti entro 5 giorni lavorativi dalla segnalazione e gestione fino a 2 anomalie nell'arco dell'anno  da inserire nel piano trimestrale di rilasci.","az":"CAMELOT"},{"id":219,"inc":"26SB4","af":"Certificazione (NON UE)","amb":"Meccanismo di aggiornamento OC","att":"Meccanismo che permetta di verificare la variazione degli OC dopo un import con la possibilità di rimuovere il vecchio e importare il nuovo aggiornato, sia relativamente a variazioni su OC positivi, sia su OC negative (trasformazione proposta da intermedia a finale)","az":"CAMELOT"},{"id":220,"inc":"26SB4","af":"Controlli","amb":"Gestione cloud per CONT","att":"Manutenzione ordinaria dell'infrastruttura cloud per l'erogazione di tutti gli ambienti minori e maggiori, comprensiva di gestione, monitoraggio, ottimizzazione e aggiornamento di risorse, servizi e processi per garantire efficienza, sicurezza, scalabilità e disponibilità di tutti gli ambienti","az":"CAMELOT"},{"id":221,"inc":"26SB4","af":"Controlli","amb":"Gestione e Manutenzione CONT -attività cross","att":"Gestione dell'applicativo in ambienti maggiori (produzione e preproduzione).","az":"CAMELOT"},{"id":222,"inc":"26SB4","af":"Controlli","amb":"Gestione e Manutenzione CONT -attività cross","att":"Manutenzione correttiva di anomalie del software rispetto alle specifiche concordate, con gestione di anomalie bloccanti entro 5 giorni lavorativi dalla segnalzione e gestione fino a 4 anomalie a trimestre da inserire nel piano trimestrale di rilasci.","az":"CAMELOT"},{"id":223,"inc":"26SB4","af":"Programmazione","amb":"Gestione cloud per APMS I semestre","att":"Manutenzione ordinaria dell'infrastruttura cloud per l'erogazione di tutti gli ambienti minori e maggiori, comprensiva di gestione, monitoraggio, ottimizzazione e aggiornamento di risorse, servizi e processi per garantire efficienza, sicurezza, scalabilità e disponibilità di tutti gli ambienti, con particolare attenzione al maggior carico dovuto alla concentrazione di tutta l'attività di elaborazione report delle 3 aree, Programmazione, Certificazione e Controlli, su Programmazione","az":"CAMELOT"},{"id":224,"inc":"26SB4","af":"Programmazione","amb":"Gestione cloud per APMS II semestre","att":"Manutenzione ordinaria dell'infrastruttura cloud per l'erogazione di tutti gli ambienti minori e maggiori, comprensiva di gestione, monitoraggio, ottimizzazione e aggiornamento di risorse, servizi e processi per garantire efficienza, sicurezza, scalabilità e disponibilità di tutti gli ambienti, con particolare attenzione al maggior carico dovuto alla concentrazione di tutta l'attività di elaborazione report delle 3 aree, Programmazione, Certificazione e Controlli, su Programmazione","az":"CAMELOT"},{"id":225,"inc":"26SB4","af":"Programmazione","amb":"Manutenzione correttiva ordinaria I semestre - attività cross (EU e non)","att":"Gestione dell'applicativo in ambienti maggiori (produzione e preproduzione).","az":"CAMELOT"},{"id":226,"inc":"26SB4","af":"Programmazione","amb":"Manutenzione correttiva ordinaria I semestre - attività cross (EU e non)","att":"Supporto e assistenza tecnica","az":"CAMELOT"},{"id":227,"inc":"26SB4","af":"Programmazione","amb":"Manutenzione correttiva ordinaria I semestre - attività cross (EU e non)","att":"Manutenzione correttiva di anomalie del software rispetto alle specifiche concordate, con gestione di anomalie bloccanti entro 5 giorni lavorativi dalla segnalzione e gestione di anomalie non bloccanti da inserire nel piano trimestrale di rilasci.","az":"CAMELOT"},{"id":228,"inc":"26SB4","af":"Programmazione","amb":"Manutenzione correttiva ed ordinaria II semestre - attività cross (EU e non)","att":"Gestione dell'applicativo in ambienti maggiori (produzione e preproduzione).","az":"CAMELOT"},{"id":229,"inc":"26SB4","af":"Programmazione","amb":"Manutenzione correttiva ed ordinaria II semestre - attività cross (EU e non)","att":"Supporto e assistenza tecnica","az":"CAMELOT"},{"id":230,"inc":"26SB4","af":"Programmazione","amb":"Manutenzione correttiva ed ordinaria II semestre - attività cross (EU e non)","att":"Manutenzione correttiva di anomalie del software rispetto alle specifiche concordate, con gestione di anomalie bloccanti entro 5 giorni lavorativi dalla segnalzione e gestione di anomalie non bloccanti da inserire nel piano trimestrale di rilasci.","az":"CAMELOT"},{"id":231,"inc":"26SB4","af":"Programmazione","amb":"Documenti Programma e estensione syndicatoin programmi senza dotazione","att":"Estensione syndication a Programmi in stato pubblicato ma senza dotazione (non programmati) per aggancio indicatori PRSS ai bandi","az":"CAMELOT"},{"id":232,"inc":"26SB4","af":"Programmazione","amb":"Documenti Programma e estensione syndicatoin programmi senza dotazione","att":"Sezione documenti nel Programma","az":"CAMELOT"},{"id":233,"inc":"26SB4","af":"Programmazione","amb":"Adeguamento dei log di audit","att":"Implementazione/adeguamento dei log diaudit per per assicurare un livello di sicurezza in linea con le policy ARIA","az":"CAMELOT"},{"id":234,"inc":"26SB4","af":"Monitoraggio","amb":"Monitoraggio e normalizzazione della base dati a supporto di reportistica operativa, Power BI e monitoraggio PNRR","att":"Presidio della qualità del dato e normalizzazione delle basi informative","az":"B.C."},{"id":235,"inc":"26SB4","af":"Monitoraggio","amb":"Monitoraggio e normalizzazione della base dati a supporto di reportistica operativa, Power BI e monitoraggio PNRR","att":"Manutenzione dei flussi di alimentazione verso il datawarehouse e Power BI","az":"B.C."},{"id":236,"inc":"26SB4","af":"Monitoraggio","amb":"Monitoraggio e normalizzazione della base dati a supporto di reportistica operativa, Power BI e monitoraggio PNRR","att":"Evoluzione della reportistica operativa e degli indicatori di monitoraggio PNRR","az":"B.C."},{"id":237,"inc":"26SB4","af":"Monitoraggio","amb":"Monitoraggio e normalizzazione della base dati a supporto di reportistica OpenData","att":"Presidio della qualità del dato per i dataset pubblicati in modalità OpenData","az":"B.C."},{"id":238,"inc":"26SB4","af":"Monitoraggio","amb":"Monitoraggio e normalizzazione della base dati a supporto di reportistica OpenData","att":"Normalizzazione e arricchimento delle basi dati secondo gli standard di pubblicazione","az":"B.C."},{"id":239,"inc":"26SB4","af":"Monitoraggio","amb":"Monitoraggio e normalizzazione della base dati a supporto di reportistica OpenData","att":"Manutenzione dei flussi di estrazione e aggiornamento periodico dei dataset","az":"B.C."},{"id":240,"inc":"26SB4","af":"Monitoraggio","amb":"Monitoraggio e normalizzazione della base dati a supporto di reportistica OpenData","att":"Verifica di conformità ai requisiti di trasparenza e accessibilità del dato","az":"B.C."},{"id":241,"inc":"26SB4","af":"Monitoraggio","amb":"Portali Open 2.0 (ProUE, Survey DAM, etc.) - Gestione in SAS e MEV 2026","att":"L'attività include l'erogazione dei seguenti servizi integrati nel contesto funzioanale di BeS e la realizzazione, test e rilascio delle attività evolutive su seguenti portali:","az":"Elite/Digital360"},{"id":242,"inc":"26SB4","af":"Monitoraggio","amb":"Portali Open 2.0 (ProUE, Survey DAM, etc.) - Gestione in SAS e MEV 2026","att":"BeS ProUE (https://ue.regione.lombardia.it)","az":"Elite/Digital360"},{"id":243,"inc":"26SB4","af":"Monitoraggio","amb":"Portali Open 2.0 (ProUE, Survey DAM, etc.) - Gestione in SAS e MEV 2026","att":"BeS SURVEY (https://customerbandi.servizirl.it)","az":"Elite/Digital360"},{"id":244,"inc":"26SB4","af":"Monitoraggio","amb":"Portali Open 2.0 (ProUE, Survey DAM, etc.) - Gestione in SAS e MEV 2026","att":"BeS DAM (https://dam.regione.lombardia.it)","az":"Elite/Digital360"},{"id":245,"inc":"26SB4","af":"Monitoraggio","amb":"Portali Open 2.0 (ProUE, Survey DAM, etc.) - Gestione in SAS e MEV 2026","att":"BeS Orientarsi per Progettare (https://progettareue.regione.lombardia.it)","az":"Elite/Digital360"},{"id":246,"inc":"26SB4","af":"Monitoraggio","amb":"Portali Open 2.0 (ProUE, Survey DAM, etc.) - Gestione in SAS e MEV 2026","att":"BeS Monitoraggio PNRR (https://monitoraggiopnrr.regione.lombardia.it)","az":"Elite/Digital360"},{"id":247,"inc":"26SB4","af":"Monitoraggio","amb":"Portali Open 2.0 (ProUE, Survey DAM, etc.) - Gestione in SAS e MEV 2026","att":"Canone Hosting gestione ordinaria infrastrutture","az":"Elite/Digital360"},{"id":248,"inc":"26SB4","af":"Monitoraggio","amb":"Portali Open 2.0 (ProUE, Survey DAM, etc.) - Gestione in SAS e MEV 2026","att":"Canone servizio di assistenza di 2° livello - Help Desk","az":"Elite/Digital360"},{"id":249,"inc":"26SB4","af":"Monitoraggio","amb":"Oltre i Giochi 2026 - Gestione in SAS e MEV 2026","att":"Gestione in modalità SAS del portale Oltre i giochi 2026 (https://oltreigiochi2026.regione.lombardia.it/)","az":"Elite/Digital360"},{"id":250,"inc":"26SB4","af":"Monitoraggio","amb":"Oltre i Giochi 2026 - Gestione in SAS e MEV 2026","att":"Canone Hosting gestione ordinaria infrastrutture","az":"Elite/Digital360"},{"id":251,"inc":"26SB4","af":"Monitoraggio","amb":"Oltre i Giochi 2026 - Gestione in SAS e MEV 2026","att":"Canone servizio di assistenza di 2° livello - Help Desk","az":"Elite/Digital360"},{"id":252,"inc":"26SB4","af":"Monitoraggio","amb":"Oltre i Giochi 2026 - Gestione in SAS e MEV 2026","att":"Manutenzione ordinaria, piccole MEV e MEV previste per il 2026, comprensiva di attività di test e rilascio","az":"Elite/Digital360"},{"id":253,"inc":"26SB4","af":"Progettazione, Monitoraggio,  BEB","amb":"Attività di sviluppo evolutivo, per un totale di n. 2 PMEV/mese (tot. 18gg/uomo cad.)","att":"Analisi preliminare e demand management per le MEV in portafoglio","az":"B.C."},{"id":254,"inc":"26SB4","af":"Progettazione, Monitoraggio,  BEB","amb":"Attività di sviluppo evolutivo, per un totale di n. 2 PMEV/mese (tot. 18gg/uomo cad.)","att":"Realizzazione di n. 2 PMEV/mese, ciascuna pari a 18 gg/uomo","az":"B.C."},{"id":255,"inc":"26SB4","af":"Progettazione, Monitoraggio,  BEB","amb":"Attività di sviluppo evolutivo, per un totale di n. 2 PMEV/mese (tot. 18gg/uomo cad.)","att":"Coordinamento con le aree funzionali coinvolte e gestione delle dipendenze","az":"B.C."},{"id":256,"inc":"26SB4","af":"Progettazione, Monitoraggio,  BEB","amb":"Attività di sviluppo evolutivo, per un totale di n. 2 PMEV/mese (tot. 18gg/uomo cad.)","att":"Supporto al collaudo e accompagnamento al rilascio in produzione","az":"B.C."},{"id":257,"inc":"26SB4","af":"Progettazione, Monitoraggio,  BEB","amb":"Attività manutentiva e correttiva, per un totale di n. 2 anomalie/mese","att":"Presa in carico e analisi preliminare delle anomalie segnalate","az":"B.C."},{"id":258,"inc":"26SB4","af":"Progettazione, Monitoraggio,  BEB","amb":"Attività manutentiva e correttiva, per un totale di n. 2 anomalie/mese","att":"Risoluzione di n. 2 anomalie/mese nei tempi previsti dagli SLA contrattuali","az":"B.C."},{"id":259,"inc":"26SB4","af":"Progettazione, Monitoraggio,  BEB","amb":"Attività manutentiva e correttiva, per un totale di n. 2 anomalie/mese","att":"Esecuzione dei test di regressione e rilascio in produzione delle correzioni","az":"B.C."},{"id":260,"inc":"26SB4","af":"Progettazione, Monitoraggio,  BEB","amb":"Attività manutentiva e correttiva, per un totale di n. 2 anomalie/mese","att":"Tracciamento delle anomalie e produzione della reportistica di servizio","az":"B.C."},{"id":261,"inc":"26SB4","af":"Normalizzazione","amb":"normalizzazione dei dati delle pratiche / domande degli strumenti / bandi / procedimenti realizzati sulla piattaforma BeS per le attività non UE","att":"analisi di esigenze specifiche per l'individuazione e il recupero di informazioni raccolte dal sistema BeS","az":"ENG"},{"id":262,"inc":"26SB4","af":"Normalizzazione","amb":"normalizzazione dei dati delle pratiche / domande degli strumenti / bandi / procedimenti realizzati sulla piattaforma BeS per le attività non UE","att":"analisi impatti dei wp e delle mev delle aree funzionali del sistema BeS sul modello normalizzato dei dati","az":"ENG"},{"id":263,"inc":"26SB4","af":"Normalizzazione","amb":"normalizzazione dei dati delle pratiche / domande degli strumenti / bandi / procedimenti realizzati sulla piattaforma BeS per le attività non UE","att":"progettazione adeguamento continuo del modello dati uniformato/unificato","az":"ENG"},{"id":264,"inc":"26SB4","af":"Normalizzazione","amb":"normalizzazione dei dati delle pratiche / domande degli strumenti / bandi / procedimenti realizzati sulla piattaforma BeS per le attività non UE","att":"defniizione delle regole di warning delle consistenze dei dati","az":"ENG"},{"id":265,"inc":"26SB4","af":"Normalizzazione","amb":"normalizzazione dei dati delle pratiche / domande degli strumenti / bandi / procedimenti realizzati sulla piattaforma BeS per le attività non UE","att":"produzione di deliverable documentali che descrivano quanto sopra","az":"ENG"},{"id":266,"inc":"26SB4","af":"Normalizzazione","amb":"normalizzazione dei dati delle pratiche / domande degli strumenti / bandi / procedimenti realizzati sulla piattaforma BeS per le attività non UE","att":"realizzazione di estrazione dati e reportistiche ad hoc per il cliente o per le varie aree / consumer","az":"ENG"},{"id":267,"inc":"26SB4","af":"Normalizzazione","amb":"normalizzazione dei dati delle pratiche / domande degli strumenti / bandi / procedimenti realizzati sulla piattaforma BeS per le attività non UE","att":"analisi e verifica delle incongruenze e indirizzamento della loro risoluzione","az":"ENG"},{"id":268,"inc":"26SB4","af":"Normalizzazione","amb":"normalizzazione dei dati delle pratiche / domande degli strumenti / bandi / procedimenti realizzati sulla piattaforma BeS per le attività non UE","att":"consulenza per partner, cliente Aria e gdl sul dominio seguito","az":"ENG"},{"id":269,"inc":"26SB4","af":"Normalizzazione","amb":"normalizzazione dei dati delle pratiche / domande degli strumenti / bandi / procedimenti realizzati sulla piattaforma BeS per le attività non UE","att":"organizzazione del lavoro del gruppo di normalizzazione","az":"ENG"},{"id":270,"inc":"26SB4","af":"amm di sistema","amb":"Aggiornamento sorgenti","att":"Manutenzione e versionamento dei sorgenti applicativi nei repository di riferimento","az":"Elite/Digital360"},{"id":271,"inc":"26SB4","af":"amm di sistema","amb":"Aggiornamento sorgenti","att":"Aggiornamento delle librerie e delle dipendenze nel rispetto delle policy di sicurezza","az":"Elite/Digital360"},{"id":272,"inc":"26SB4","af":"amm di sistema","amb":"Aggiornamento sorgenti","att":"Allineamento dei sorgenti tra ambienti di sviluppo, collaudo e produzione","az":"Elite/Digital360"},{"id":273,"inc":"26SB4","af":"amm di sistema","amb":"Aggiornamento sorgenti","att":"Tracciamento delle modifiche e produzione della documentazione tecnica associata","az":"Elite/Digital360"},{"id":274,"inc":"26SB4","af":"amm di sistema","amb":"Manutenzione degli ambienti produttivi e di sviluppo","att":"Presidio operativo continuativo degli ambienti di produzione e sviluppo","az":"B.C."},{"id":275,"inc":"26SB4","af":"amm di sistema","amb":"Manutenzione degli ambienti produttivi e di sviluppo","att":"Manutenzione ordinaria, patching e aggiornamenti delle componenti di piattaforma","az":"B.C."},{"id":276,"inc":"26SB4","af":"amm di sistema","amb":"Manutenzione degli ambienti produttivi e di sviluppo","att":"Monitoraggio delle performance e gestione delle anomalie infrastrutturali","az":"B.C."},{"id":277,"inc":"26SB4","af":"amm di sistema","amb":"Manutenzione degli ambienti produttivi e di sviluppo","att":"Allineamento delle configurazioni tra gli ambienti nel rispetto delle policy operative","az":"B.C."},{"id":278,"inc":"26SB4","af":"amm di sistema","amb":"Piattaforma - Coordinamento attività trasversali e supporto alla gestione","att":"Coordinamento delle attività trasversali tra le aree funzionali della piattaforma","az":"B.C."},{"id":279,"inc":"26SB4","af":"amm di sistema","amb":"Piattaforma - Coordinamento attività trasversali e supporto alla gestione","att":"Presidio SAL e riunioni ordinarie di coordinamento con RL e referenti tecnici","az":"B.C."},{"id":280,"inc":"26SB4","af":"amm di sistema","amb":"Piattaforma - Coordinamento attività trasversali e supporto alla gestione","att":"Gestione delle dipendenze e supporto al piano operativo complessivo","az":"B.C."},{"id":281,"inc":"26SB4","af":"amm di sistema","amb":"Piattaforma - Coordinamento attività trasversali e supporto alla gestione","att":"Reportistica di sintesi sull'avanzamento e sulle criticità di piattaforma","az":"B.C."},{"id":282,"inc":"26SB4","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 2 rilasci mensili","att":"Pianificazione e coordinamento dei rilasci secondo il calendario operativo concordato","az":"B.C."},{"id":283,"inc":"26SB4","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 2 rilasci mensili","att":"Esecuzione di n. 2 rilasci mensili in ambiente di Produzione nel rispetto degli SLA contrattuali","az":"B.C."},{"id":284,"inc":"26SB4","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 2 rilasci mensili","att":"Presidio delle attività di pre-rilascio, deploy e verifica post-rilascio","az":"B.C."},{"id":285,"inc":"26SB4","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 2 rilasci mensili","att":"Gestione del rollback e delle azioni correttive in caso di anomalie riscontrate","az":"B.C."},{"id":286,"inc":"26SB4","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 8 rilasci mensili, in linea con il volume medio dei rilasci 2025","att":"Pianificazione e coordinamento dei rilasci secondo il calendario operativo concordato","az":"B.C."},{"id":287,"inc":"26SB4","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 8 rilasci mensili, in linea con il volume medio dei rilasci 2025","att":"Esecuzione di n. 8 rilasci mensili in ambiente di Produzione nel rispetto degli SLA contrattuali","az":"B.C."},{"id":288,"inc":"26SB4","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 8 rilasci mensili, in linea con il volume medio dei rilasci 2025","att":"Presidio delle attività di pre-rilascio, deploy e verifica post-rilascio","az":"B.C."},{"id":289,"inc":"26SB4","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 8 rilasci mensili, in linea con il volume medio dei rilasci 2025","att":"Gestione del rollback e delle azioni correttive in caso di anomalie riscontrate","az":"B.C."},{"id":290,"inc":"26SB4","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 8 rilasci mensili, in linea con il volume medio dei rilasci 2025","att":"Pianificazione e coordinamento dei rilasci secondo il calendario operativo concordato","az":"ENG (sub INNOVAWAY)"},{"id":291,"inc":"26SB4","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 8 rilasci mensili, in linea con il volume medio dei rilasci 2025","att":"Esecuzione di n. 8 rilasci mensili in ambiente di Produzione nel rispetto degli SLA contrattuali","az":"ENG (sub INNOVAWAY)"},{"id":292,"inc":"26SB4","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 8 rilasci mensili, in linea con il volume medio dei rilasci 2025","att":"Presidio delle attività di pre-rilascio, deploy e verifica post-rilascio","az":"ENG (sub INNOVAWAY)"},{"id":293,"inc":"26SB4","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 8 rilasci mensili, in linea con il volume medio dei rilasci 2025","att":"Gestione del rollback e delle azioni correttive in caso di anomalie riscontrate","az":"ENG (sub INNOVAWAY)"},{"id":294,"inc":"26SB4","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 8 rilasci mensili, in linea con il volume medio dei rilasci 2025","att":"Piattaforma SIEBEL:","az":"ENG (sub INNOVAWAY)"},{"id":295,"inc":"26SB4","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 8 rilasci mensili, in linea con il volume medio dei rilasci 2025","att":"Gestione e risoluzione ticket inoltrati da Assistenza di 2° livello","az":"ENG (sub INNOVAWAY)"},{"id":296,"inc":"26SB4","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 8 rilasci mensili, in linea con il volume medio dei rilasci 2025","att":"Tracciamento/apertura su Polarion di anomalie/bug tramite Siebel","az":"ENG (sub INNOVAWAY)"},{"id":297,"inc":"26SB4","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 8 rilasci mensili, in linea con il volume medio dei rilasci 2025","att":"Pianificazione e coordinamento dei rilasci secondo il calendario operativo concordato","az":"ENG"},{"id":298,"inc":"26SB4","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 8 rilasci mensili, in linea con il volume medio dei rilasci 2025","att":"Esecuzione di n. 8 rilasci mensili in ambiente di Produzione nel rispetto degli SLA contrattuali","az":"ENG"},{"id":299,"inc":"26SB4","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 8 rilasci mensili, in linea con il volume medio dei rilasci 2025","att":"Presidio delle attività di pre-rilascio, deploy e verifica post-rilascio","az":"ENG"},{"id":300,"inc":"26SB4","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 8 rilasci mensili, in linea con il volume medio dei rilasci 2025","att":"Gestione del rollback e delle azioni correttive in caso di anomalie riscontrate","az":"ENG"},{"id":301,"inc":"26SB4","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 8 rilasci mensili, in linea con il volume medio dei rilasci 2025","att":"Piattaforma SIEBEL:","az":"ENG"},{"id":302,"inc":"26SB4","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 8 rilasci mensili, in linea con il volume medio dei rilasci 2025","att":"Gestione e risoluzione ticket inoltrati da Assistenza di 2° livello","az":"ENG"},{"id":303,"inc":"26SB4","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 8 rilasci mensili, in linea con il volume medio dei rilasci 2025","att":"Tracciamento/apertura su Polarion di anomalie/bug tramite Siebel","az":"ENG"},{"id":304,"inc":"26SB4","af":"CRM","amb":"Analisi e sviluppo di evolutive nell'ambito delle aree funzionali Gestione Utenti e CRM","att":"Allineamento dati anagrafici modulistica - SIUO","az":"Elite/Digital360"},{"id":305,"inc":"26SB4","af":"CRM","amb":"Analisi e sviluppo di evolutive nell'ambito delle aree funzionali Gestione Utenti e CRM","att":"Esposizione servizio che da struttura organizzativa restituisce ruoli dinamici e gruppi dell'ente","az":"Elite/Digital360"},{"id":306,"inc":"26SB4","af":"CRM","amb":"Analisi e sviluppo di evolutive nell'ambito delle aree funzionali Gestione Utenti e CRM","att":"Profilazione Utenti: Integrazione BeS e SAP","az":"Elite/Digital360"},{"id":307,"inc":"26SB4","af":"CRM","amb":"Analisi e sviluppo di evolutive nell'ambito delle aree funzionali Gestione Utenti e CRM","att":"Introduzione del sistema AGID di Analytics su piattaforma Bandi e Servizi","az":"Elite/Digital360"},{"id":308,"inc":"26SB4","af":"CRM","amb":"Analisi e sviluppo di evolutive nell'ambito delle aree funzionali Gestione Utenti e CRM","att":"GU Tracciamento mail istituzionale BO_Servizi Abitativi","az":"Elite/Digital360"},{"id":309,"inc":"26SB4","af":"CRM","amb":"Analisi e sviluppo di evolutive nell'ambito delle aree funzionali Gestione Utenti e CRM","att":"Consolidamento processi di profilazione a seguito di dismissione SGPROF e in accordo con attività di analisi di processo e funzionalità nuova \"\"Area Riservata BeS\"","az":"Elite/Digital360"},{"id":310,"inc":"26SB4","af":"CRM","amb":"Supporto tecnico e gestione delle Aree Funzionali Gestione Utenti e CRM","att":"Presidio SAL e riunioni ordinarie di progetto (SAL settimanali, incontri con RL, etc.)","az":"Elite/Digital360"},{"id":311,"inc":"26SB4","af":"CRM","amb":"Supporto tecnico e gestione delle Aree Funzionali Gestione Utenti e CRM","att":"Gestione del piano operativo di lavoro dell’Area Funzionale GU e CRM","az":"Elite/Digital360"},{"id":312,"inc":"26SB4","af":"CRM","amb":"Supporto tecnico e gestione delle Aree Funzionali Gestione Utenti e CRM","att":"Analisi preliminare e demand management per MEV derivanti da obblighi normativi o risoluzione di criticità da sviluppare nell'ambito della piattaforma legacy","az":"Elite/Digital360"},{"id":313,"inc":"26SB4","af":"CRM","amb":"Supporto tecnico e gestione delle Aree Funzionali Gestione Utenti e CRM","att":"Presa in carico e analisi preliminare anomalie","az":"Elite/Digital360"},{"id":314,"inc":"26SB4","af":"CRM","amb":"Supporto tecnico e gestione delle Aree Funzionali Gestione Utenti e CRM","att":"Risoluzione anomalie derivanti da rilasci e sviluppi dalla 25.X in avanti nei tempi previsti dagli SLA contrattuali","az":"Elite/Digital360"},{"id":315,"inc":"26SB4","af":"CRM","amb":"Supporto tecnico e gestione delle Aree Funzionali Gestione Utenti e CRM","att":"Risoluzione di anomalie relative a sviluppi derivanti da attività di integrazione, fino a un massimo di 1 intervento al mese","az":"Elite/Digital360"},{"id":316,"inc":"26SB4","af":"CRM","amb":"Supporto tecnico e gestione delle Aree Funzionali Gestione Utenti e CRM","att":"Analisi, progettazione.e sviluppo di  piccole MEV (< 10 gg) fino ad un massimo di 1 al mese.","az":"Elite/Digital360"},{"id":317,"inc":"26SB4","af":"CRM","amb":"Analisi e gestione manutentiva ed evolutiva delle aree Gestione Utenti e CRM in ottica di convergenza e migrazione a BeS++","att":"Analisi preliminare e demand management per richieste di interventi di manutenzione evolutiva derivanti da attività di convergenza di procedimenti e servizi verso BeS, anche in ottica di passaggio alla nuova piattaforma BeS++","az":"Elite/Digital360"},{"id":318,"inc":"26SB4","af":"CRM","amb":"Analisi e gestione manutentiva ed evolutiva delle aree Gestione Utenti e CRM in ottica di convergenza e migrazione a BeS++","att":"Analisi preliminare e demand management per MEV derivanti da opportunità di miglioramento della UX e da richieste di evolutive in ambito Gestione Utenti e CRM, nel contesto del passaggio alla nuova piattaforma BeS++","az":"Elite/Digital360"},{"id":319,"inc":"26SB4","af":"CRM","amb":"Analisi e gestione manutentiva ed evolutiva delle aree Gestione Utenti e CRM in ottica di convergenza e migrazione a BeS++","att":"Presa in carico e analisi preliminare anomalie relative a implemnetazioni per il programma convergenza","az":"Elite/Digital360"},{"id":320,"inc":"26SB4","af":"CRM","amb":"Analisi e gestione manutentiva ed evolutiva delle aree Gestione Utenti e CRM in ottica di convergenza e migrazione a BeS++","att":"Analisi di fattibilità sulla portabilità al nuovo sistema BeS++ e supporto funzionale e specialistico alle attività architetturali richieste per la realizzazione delle funzionalitàe. dei processi gestiti nelle aree funzionali GU e CRM","az":"Elite/Digital360"},{"id":321,"inc":"26SB4","af":"CRM","amb":"Analisi e gestione manutentiva ed evolutiva delle aree Gestione Utenti e CRM in ottica di convergenza e migrazione a BeS++","att":"Risoluzione di anomalie relative a sviluppi derivanti da attività di integrazione, fino a un massimo di 1 intervento al mese\"","az":"Elite/Digital360"},{"id":322,"inc":"26SB4","af":"Anagrafiche","amb":"Gestione manutentiva e presidio tecnico per funzionalità anagrafiche","att":"Presidio SAL e riunioni ordinarie di progetto (SAL settimanali, incontri con Regione) in relazione alle attività di predsidio e gestsione delle anagrafiche sviluppate all'interno di Bandi e Servizi, in primis Elenco Territoriale Volntari (ex DBVOL)","az":"B.C."},{"id":323,"inc":"26SB4","af":"Anagrafiche","amb":"Gestione manutentiva e presidio tecnico per funzionalità anagrafiche","att":"Gestione del piano operativo di lavoro dell’Area Funzionale","az":"B.C."},{"id":324,"inc":"26SB4","af":"Anagrafiche","amb":"Gestione manutentiva e presidio tecnico per funzionalità anagrafiche","att":"Analisi preliminare e demand management per MEV","az":"B.C."},{"id":325,"inc":"26SB4","af":"Anagrafiche","amb":"Gestione manutentiva e presidio tecnico per funzionalità anagrafiche","att":"Implementazione di piccole MEV (<10 gg) fino ad un massimo di 1 al mese.","az":"B.C."},{"id":326,"inc":"26SB4","af":"Anagrafiche","amb":"Gestione manutentiva e presidio tecnico per funzionalità anagrafiche","att":"Presa in carico e analisi preliminare anomalie in accordo con referenti AF di BC","az":"B.C."},{"id":327,"inc":"26SB4","af":"Anagrafiche","amb":"Gestione manutentiva e presidio tecnico per funzionalità anagrafiche","att":"Risoluzione anomalie Critiche, Alte e Medie nei tempi previsti dagli SLA contrattuali","az":"B.C."},{"id":328,"inc":"26SB4","af":"Certificazione","amb":"Adeguamenti stack tecnologico per obsolescenza tecnologica","att":"Aggiornamento del backend a springline2","az":"CAMELOT"},{"id":329,"inc":"26SB4","af":"(senza Area Funzionale)","amb":"Gestione post-SGPROF","att":"Presidio operativo e gestione delle implementazioni derivanti dagli sviluppi realizzati su BeS per consentire la dismissione di SGPROF","az":"Elite/Digital360"},{"id":330,"inc":"26S21","af":"GSAP","amb":"Evoluzione dell'area di gestione strumenti attuativi e procedimenti (GSAP) e presidio tecnico in ottica di convergenza e migrazione verso la piattaforma BeS++","att":"Analisi preliminare e demand management per MEV relative ad attività di convergenza di procedimenti e servizi verso la piattaforma BeS","az":"Elite/Digital360"},{"id":331,"inc":"26S21","af":"GSAP","amb":"Evoluzione dell'area di gestione strumenti attuativi e procedimenti (GSAP) e presidio tecnico in ottica di convergenza e migrazione verso la piattaforma BeS++","att":"Analisi funzionali finalizzata all'implementazione di evolutive","az":"Elite/Digital360"},{"id":332,"inc":"26S21","af":"GSAP","amb":"Evoluzione dell'area di gestione strumenti attuativi e procedimenti (GSAP) e presidio tecnico in ottica di convergenza e migrazione verso la piattaforma BeS++","att":"Sviluppo piccole MEV (< 10 gg) fino ad un massimo di 2 al mese","az":"Elite/Digital360"},{"id":333,"inc":"26S21","af":"GSAP","amb":"Evoluzione dell'area di gestione strumenti attuativi e procedimenti (GSAP) e presidio tecnico in ottica di convergenza e migrazione verso la piattaforma BeS++","att":"Analisi e supporto alla risoluzione di anomalie derivanti da attività di integrazione, fino a un massimo di 1 intervento al mese","az":"Elite/Digital360"},{"id":334,"inc":"26S21","af":"GSAP","amb":"Evoluzione dell'area di gestione strumenti attuativi e procedimenti (GSAP) e presidio tecnico in ottica di convergenza e migrazione verso la piattaforma BeS++","att":"Adeguamenti e supporto tecnico per l'integrazione con la nuova vetrina BeS++ e con la nuova Area Riservata BeS++","az":"Elite/Digital360"},{"id":335,"inc":"26S21","af":"GSAP","amb":"Co-design, progettazione e implementazione della nuova Vetrina BeS++","att":"Attività di co-design per la definizione della UX/UI e dell'architettura delle informazioni della nuova Vetrina BeS++;","az":"Elite/Digital360"},{"id":336,"inc":"26S21","af":"GSAP","amb":"Co-design, progettazione e implementazione della nuova Vetrina BeS++","att":"Analisi e progettazione della soluzione tecnologica, architetturale e funzionale, realizzata sulla base degli esiti del co-design, dei punti di miglioramento noti dell'attuale vetrina e delle esigenze di miglioramento della qualità della UX e della capacità comunicativa;","az":"Elite/Digital360"},{"id":337,"inc":"26S21","af":"GSAP","amb":"Co-design, progettazione e implementazione della nuova Vetrina BeS++","att":"Sviluppo e implementazione della nuova Vetrina BeS++, integrata con il sistema legacy (fase transitoria) e con le nuove funzionalità e procedimenti oggetto di trasferimento sulla nuova piattaforma nel corso del 2026.","az":"Elite/Digital360"},{"id":338,"inc":"26S21","af":"Trasversale","amb":"Supporto specialistico e tecnico al GDL Bandi, benchmark, analisi e supporto strategico per la definizione di linee evolutive anche in ottica BeS++","att":"Supporto specialistico e tecnico per il GDL Bandi; supporto alla definizione del modello di governance , alla semplificazione e ottimizzazione dei processi di business e alla standardizzazione degli schemi operativi anche in ottica di adozione di BeS++; conduzione di analisi comparative e benchmark specialistici a supporto del posizionamento strategico della piattaforma e delle decisioni di sviluppo; analisi e qualificazione tecnica delle richieste di sviluppo e gestione delle interazioni con Regione Lombardia e gli stakeholder coinvolti nel processo di convergenza; identificazione di opportunità di evoluzione funzionale e architetturale a supporto del piano di implementazione; presidio dei SAL contrattuali e operativi di BeS; analisi dell'impatto architetturale e valutazione degli interventi di porting; definizione di linee guida e processi per la pianificazione e la calendarizzazione dei bandi.","az":"Elite/Digital360"},{"id":339,"inc":"26S21","af":"Trasversale","amb":"Manutenzione degli ambienti produttivi e di sviluppo","att":"Presidio operativo continuativo degli ambienti di produzione e sviluppo","az":"B.C."},{"id":340,"inc":"26S21","af":"Trasversale","amb":"Manutenzione degli ambienti produttivi e di sviluppo","att":"Manutenzione ordinaria, patching e aggiornamenti delle componenti di piattaforma","az":"B.C."},{"id":341,"inc":"26S21","af":"Trasversale","amb":"Manutenzione degli ambienti produttivi e di sviluppo","att":"Monitoraggio delle performance e gestione delle anomalie infrastrutturali","az":"B.C."},{"id":342,"inc":"26S21","af":"Trasversale","amb":"Manutenzione degli ambienti produttivi e di sviluppo","att":"Allineamento delle configurazioni tra gli ambienti nel rispetto delle policy operative","az":"B.C."},{"id":343,"inc":"26S21","af":"Trasversale","amb":"Manutenzione evolutiva e correttiva per il rispetto della normativa WCAG 2.1","att":"Analisi di accessibilità delle interfacce rispetto ai criteri WCAG 2.1","az":"B.C."},{"id":344,"inc":"26S21","af":"Trasversale","amb":"Manutenzione evolutiva e correttiva per il rispetto della normativa WCAG 2.1","att":"Sviluppo evolutivo per l'adeguamento delle componenti non conformi","az":"B.C."},{"id":345,"inc":"26S21","af":"Trasversale","amb":"Manutenzione evolutiva e correttiva per il rispetto della normativa WCAG 2.1","att":"Manutenzione correttiva sulle anomalie di accessibilità segnalate","az":"B.C."},{"id":346,"inc":"26S21","af":"Trasversale","amb":"Manutenzione evolutiva e correttiva per il rispetto della normativa WCAG 2.1","att":"Verifica periodica della conformità e produzione della relativa documentazione","az":"B.C."},{"id":347,"inc":"26S21","af":"Trasversale","amb":"Attività RfC per un totale di n. 4 annuali","att":"Presa in carico e analisi delle Request for Change in ingresso","az":"B.C."},{"id":348,"inc":"26S21","af":"Trasversale","amb":"Attività RfC per un totale di n. 4 annuali","att":"Realizzazione di n. 4 RfC su base annua secondo il piano concordato","az":"B.C."},{"id":349,"inc":"26S21","af":"Trasversale","amb":"Attività RfC per un totale di n. 4 annuali","att":"Coordinamento con le aree funzionali per la valutazione di impatto e fattibilità","az":"B.C."},{"id":350,"inc":"26S21","af":"Trasversale","amb":"Attività RfC per un totale di n. 4 annuali","att":"Supporto al collaudo e accompagnamento al rilascio in produzione","az":"B.C."},{"id":351,"inc":"26S21","af":"Trasversale","amb":"Piattaforma - Coordinamento attività trasversali e supporto alla gestione","att":"Coordinamento delle attività trasversali tra le aree funzionali della piattaforma","az":"B.C."},{"id":352,"inc":"26S21","af":"Trasversale","amb":"Piattaforma - Coordinamento attività trasversali e supporto alla gestione","att":"Presidio SAL e riunioni ordinarie di coordinamento con RL e referenti tecnici","az":"B.C."},{"id":353,"inc":"26S21","af":"Trasversale","amb":"Piattaforma - Coordinamento attività trasversali e supporto alla gestione","att":"Gestione delle dipendenze e supporto al piano operativo complessivo","az":"B.C."},{"id":354,"inc":"26S21","af":"Trasversale","amb":"Piattaforma - Coordinamento attività trasversali e supporto alla gestione","att":"Reportistica di sintesi sull'avanzamento e sulle criticità di piattaforma","az":"B.C."},{"id":355,"inc":"26S21","af":"Trasversale","amb":"Trasversale","att":"Analisi di dettaglio delle esigenze di BeS++","az":"B.C."},{"id":356,"inc":"26S21","af":"Trasversale","amb":"Trasversale","att":"Integrazione autenticazione (integrazione con IDPC)","az":"B.C."},{"id":357,"inc":"26S21","af":"Trasversale","amb":"Trasversale","att":"Definizione e implementaazione del nuovo modello autorizzativo (profilazione + cono di visibilità dati)","az":"B.C."},{"id":358,"inc":"26S21","af":"Trasversale","amb":"Trasversale","att":"Integrazione nuovo modello di delega","az":"B.C."},{"id":359,"inc":"26S21","af":"Trasversale","amb":"Trasversale","att":"Progettazione architetturale","az":"B.C."},{"id":360,"inc":"26S21","af":"Trasversale","amb":"Trasversale","att":"Definizione del modello dati piramidale","az":"B.C."},{"id":361,"inc":"26S21","af":"Trasversale","amb":"Trasversale","att":"Adeguamento degli standard di gestione di ARIA a BeS++","az":"B.C."},{"id":362,"inc":"26S21","af":"Trasversale","amb":"Trasversale","att":"Integrazione dei dati provenienti da BeS","az":"B.C."},{"id":363,"inc":"26S21","af":"Trasversale","amb":"Trasversale","att":"Attività di codesign congiunta con Sistemi Informativi RL","az":"B.C."},{"id":364,"inc":"26S21","af":"Trasversale","amb":"Trasversale","att":"Creazione sistema di Audit","az":"B.C."},{"id":365,"inc":"26S21","af":"Trasversale","amb":"Trasversale","att":"Esposizione API per dati di piattaforma verso sistemi terzi","az":"B.C."},{"id":366,"inc":"26S21","af":"Trasversale","amb":"Trasversale","att":"Creazione del catalogo di base dei bandi","az":"B.C."},{"id":367,"inc":"26S21","af":"Trasversale","amb":"Coordinamento tecnico, piano di lavoro e supporto per gestione architettura","att":"Presidio del tavolo architetturale con contributo alla validazione delle scelte tecniche e alla governance delle decisioni di evoluzione della piattaforma anche in ottica di adozione di BeS++ e del programma convergenza.","az":"Elite/Digital360"},{"id":368,"inc":"26S21","af":"Trasversale","amb":"Coordinamento tecnico, piano di lavoro e supporto per gestione architettura","att":"Mappatura dei componenti in perimetro e valutazione dello stato dell'arte rispetto a standard architetturali (separazione dei livelli, osservabilità, resilienza, debito tecnico) con identificazione dei gap.","az":"Elite/Digital360"},{"id":369,"inc":"26S21","af":"Trasversale","amb":"Coordinamento tecnico, piano di lavoro e supporto per gestione architettura","att":"Documentazione delle configurazioni e dei vincoli non funzionali (sicurezza, performance, disponibilità, disaster recovery) rilevanti anche ai fini del porting.","az":"Elite/Digital360"},{"id":370,"inc":"26S21","af":"Trasversale","amb":"Coordinamento tecnico, piano di lavoro e supporto per gestione architettura","att":"Identificazione di rischi, colli di bottiglia e quick win nel percorso di convergenza e transizione verso BeS++.","az":"Elite/Digital360"},{"id":371,"inc":"26S21","af":"Trasversale","amb":"Coordinamento tecnico, piano di lavoro e supporto per gestione architettura","att":"Partecipazione ai SAL ricorrenti e ai tavoli tecnici con Regione Lombardia e gli stakeholder di progetto.","az":"Elite/Digital360"},{"id":372,"inc":"26S21","af":"Trasversale","amb":"Progettazione, analisi e pianificazione porting BeS++ per specifiche Aree Funzionali di Wave 2 e sviluppi legacy per la continuità operativa nel periodo transitorio","att":"Progettazione e analisi funzionale propedeutica agli interventi di sviluppo sulla piattaforma BeS++: contributi specialistici per la definizione del quadro architetturale target, valutazione delle implicazioni strutturali della migrazione e delle scelte tecnologiche Low Code. Analisi di portabilità per specifiche aree funzionali — BeB (Business Identity Broker), gestione Atti, GSAP e GU/CRM — con mappatura di casi d'uso, processi e funzionalità e definizione del piano di migrazione. Realizzazione di sviluppi sul sistema legacy necessari a garantire autenticazione e profilazione sulla nuova piattaforma nel periodo transitorio e  sviluppi per l'attivazione della nuova Vetrina BeS++. Interventi di riduzione rischi e analisi funzionale per l'integrazione con la piattaforma legacy nel periodo transitorio, con l'obiettivo di garantire la continuità operativa nelle fasi di attivazione di BeS++.","az":"Elite/Digital360"},{"id":373,"inc":"26S21","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 2 rilasci mensili","att":"Pianificazione e coordinamento dei rilasci secondo il calendario operativo concordato","az":"B.C."},{"id":374,"inc":"26S21","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 2 rilasci mensili","att":"Esecuzione di n. 2 rilasci mensili in ambiente di Produzione nel rispetto degli SLA contrattuali","az":"B.C."},{"id":375,"inc":"26S21","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 2 rilasci mensili","att":"Presidio delle attività di pre-rilascio, deploy e verifica post-rilascio","az":"B.C."},{"id":376,"inc":"26S21","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 2 rilasci mensili","att":"Gestione del rollback e delle azioni correttive in caso di anomalie riscontrate","az":"B.C."},{"id":377,"inc":"26S21","af":"Atti","amb":"Analisi e supporto per la migrazione del modulo ATTI verso la nuova piattaforma BeS++ e presidio operativo e funzionale per l'indirizzamento delle attività di sviluppo","att":"Analisi e valutazione sulla portabilità del perimetro funzionale di ATTI all'interno della nuova piattaforma BeS++ e supporto alle valutazioni architetturali e di processo per la realizzazione in BeS++ dei processi di ATTI","az":"Elite/Digital360"},{"id":378,"inc":"26S21","af":"Atti","amb":"Analisi e supporto per la migrazione del modulo ATTI verso la nuova piattaforma BeS++ e presidio operativo e funzionale per l'indirizzamento delle attività di sviluppo","att":"Analisi preliminare e funzionale con RL per MEV relative all’AF ATTI, in accordo con i referenti di L2 e in vista della migrazione del modulo ATTI nell'ambito della nuova piattaforma BeS++","az":"Elite/Digital360"},{"id":379,"inc":"26S21","af":"Atti","amb":"Analisi e supporto per la migrazione del modulo ATTI verso la nuova piattaforma BeS++ e presidio operativo e funzionale per l'indirizzamento delle attività di sviluppo","att":"Presa in carico, stima e valutazione delle richieste evolutive e delle criticità dell'attuale modulo ATTI, con verifica della risoluzione nell'ambito della nuova piattaforma","az":"Elite/Digital360"},{"id":380,"inc":"26S21","af":"Atti","amb":"Analisi e supporto per la migrazione del modulo ATTI verso la nuova piattaforma BeS++ e presidio operativo e funzionale per l'indirizzamento delle attività di sviluppo","att":"Definizione di un piano di portabilità delle funzionalità dell'AF nel contesto operativo della nuova piattaforma BeS++","az":"Elite/Digital360"},{"id":381,"inc":"26S21","af":"Procedimentificio","amb":"Procedimentificio","att":"Attività di codesign congiunta specifica per procedimenti","az":"B.C."},{"id":382,"inc":"26S21","af":"Procedimentificio","amb":"Procedimentificio","att":"Integrazione dell'analisi del procedimento MERCAP rispetto a BeS++","az":"B.C."},{"id":383,"inc":"26S21","af":"Procedimentificio","amb":"Procedimentificio","att":"Integrazione dell'analisi del procedimento Rifiuti rispetto a BeS++","az":"B.C."},{"id":384,"inc":"26S21","af":"Procedimentificio","amb":"Procedimentificio","att":"Analisi del procedimento SIGEFI rispetto a BeS++","az":"B.C."},{"id":385,"inc":"26S21","af":"Procedimentificio","amb":"Procedimentificio","att":"Creazione del procedimento MERCAP","az":"B.C."},{"id":386,"inc":"26S21","af":"Procedimentificio","amb":"Procedimentificio","att":"Creazione del procedimento Rifiuti","az":"B.C."},{"id":387,"inc":"26S21","af":"Procedimentificio","amb":"Procedimentificio","att":"Analisi del procedimento S&FEM rispetto a BeS++","az":"B.C."},{"id":388,"inc":"26S21","af":"Procedimentificio","amb":"Procedimentificio","att":"Analisi del procedimento AIA RIFIUTI rispetto a BeS++","az":"B.C."},{"id":389,"inc":"26S21","af":"Procedimentificio","amb":"Procedimentificio","att":"Addestramento team Procedimentificio","az":"B.C."},{"id":390,"inc":"26S21","af":"Procedimentificio","amb":"Procedimentificio","att":"Creazione del procedimento S&FEM","az":"B.C."},{"id":391,"inc":"26S21","af":"Procedimentificio","amb":"Procedimentificio","att":"Creazione del procedimento AIA RIFIUTI","az":"B.C."},{"id":392,"inc":"26S21","af":"Procedimentificio","amb":"Procedimentificio","att":"Creazione del procedimento SIGEFI","az":"B.C."},{"id":393,"inc":"26S21","af":"Procedimentificio","amb":"Procedimentificio","att":"Supporto post go-live","az":"B.C."},{"id":394,"inc":"26S21","af":"Progettazione","amb":"Proge","att":"Integrazione della UI BeS++ nell'ecosistema BeS","az":"B.C."},{"id":395,"inc":"26S21","af":"Progettazione","amb":"Proge","att":"Creazione della piattaforma dedicata al frontoffice","az":"B.C."},{"id":396,"inc":"26S21","af":"Progettazione","amb":"Proge","att":"Integrazione delle banche dati necessarie ai procedimenti","az":"B.C."},{"id":397,"inc":"26S21","af":"Progettazione","amb":"Proge","att":"Integrazione del servizio HUB","az":"B.C."},{"id":398,"inc":"26S21","af":"Progettazione","amb":"Proge","att":"Creazione della nuova todolist lato backoffice","az":"B.C."},{"id":399,"inc":"26S21","af":"Progettazione","amb":"Proge","att":"Creazione della piattaforma dedicata a bandificio/procedimentificio","az":"B.C."},{"id":400,"inc":"26S21","af":"Progettazione","amb":"Proge","att":"Configurazione piattaforma di gestione","az":"B.C."},{"id":401,"inc":"26S21","af":"Progettazione","amb":"Proge","att":"Gestore licenze Appian","az":"B.C."},{"id":402,"inc":"26S21","af":"Progettazione","amb":"Proge","att":"Compliance GDPR e data retention","az":"B.C."},{"id":403,"inc":"26S21","af":"Progettazione","amb":"Proge","att":"Integrazione delle banche dati necessarie ai bandi regionali","az":"B.C."},{"id":404,"inc":"26S21","af":"Monitoraggio e Normalizzazione","amb":"Mon / Norm","att":"Creazione sistema di monitoraggio","az":"B.C."},{"id":405,"inc":"26G14","af":"Certificazione","amb":"POC: Gestione e Manutenzione","att":"Attività di importazione e aggiornamento delle spese per ogni proposta e supporto alla reportistica di monitoraggio (ad esempio per disallineamento dati), prevedendo 2 proposte con un periodo di 20 giorni lavorativi non sovrapposti per ogni proposta in cui raccogliere e gestire gli aggiornamenti).","az":"CAMELOT"},{"id":406,"inc":"26G14","af":"Certificazione","amb":"POC: Gestione e Manutenzione","att":"Supporto a L2 per l'erogazione di 1 sessione di formazione da 2 ore.","az":"CAMELOT"},{"id":407,"inc":"26G14","af":"Certificazione","amb":"POC: Gestione e Manutenzione","att":"Gestione, lato esposizione dei dati, di 2 richieste di modifiche, non strutturali (ad esempio inserimento nuove colonne o una modifica del calcolo di colonne già presenti, escludendo revisione della logica generale del report), a report esistenti, da inserire nel piano trimestrale di rilasci.","az":"CAMELOT"},{"id":408,"inc":"26G14","af":"Certificazione","amb":"POC: Gestione e Manutenzione","att":"Manutenzione evolutiva per un massimo di 2 piccole MEV (comprese rilavorazioni per specifiche già concordate) da massimo 12 giorni lavorativi da inserire nel piano trimestrale di rilasci.","az":"CAMELOT"},{"id":409,"inc":"26G14","af":"Certificazione","amb":"POC: Gestione e Manutenzione","att":"Manutenzione correttiva di anomalie del software rispetto alle specifiche concordate, con gestione di anomalie bloccanti entro 5 giorni lavorativi dalla segnalzione e gestione fino a 2 anomalie nell'arco dell'anno da inserire nel piano trimestrale di rilasci.","az":"CAMELOT"},{"id":410,"inc":"(senza Incarico)","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 2 rilasci mensili","att":"Pianificazione e coordinamento dei rilasci secondo il calendario operativo concordato","az":"B.C."},{"id":411,"inc":"(senza Incarico)","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 2 rilasci mensili","att":"Esecuzione di n. 2 rilasci mensili in ambiente di Produzione nel rispetto degli SLA contrattuali","az":"B.C."},{"id":412,"inc":"(senza Incarico)","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 2 rilasci mensili","att":"Presidio delle attività di pre-rilascio, deploy e verifica post-rilascio","az":"B.C."},{"id":413,"inc":"(senza Incarico)","af":"GdS","amb":"Gestione del servizio con rilascio garantito in Produzione pari a n. 2 rilasci mensili","att":"Gestione del rollback e delle azioni correttive in caso di anomalie riscontrate","az":"B.C."},{"id":414,"inc":"(senza Incarico)","af":"GdS","amb":"Manutenzione degli ambienti produttivi e di sviluppo","att":"Presidio operativo continuativo degli ambienti di produzione e sviluppo","az":"B.C."},{"id":415,"inc":"(senza Incarico)","af":"GdS","amb":"Manutenzione degli ambienti produttivi e di sviluppo","att":"Manutenzione ordinaria, patching e aggiornamenti delle componenti di piattaforma","az":"B.C."},{"id":416,"inc":"(senza Incarico)","af":"GdS","amb":"Manutenzione degli ambienti produttivi e di sviluppo","att":"Monitoraggio delle performance e gestione delle anomalie infrastrutturali","az":"B.C."},{"id":417,"inc":"(senza Incarico)","af":"GdS","amb":"Manutenzione degli ambienti produttivi e di sviluppo","att":"Allineamento delle configurazioni tra gli ambienti nel rispetto delle policy operative","az":"B.C."}];
+
+// State containers
+let allRows = SEED.slice();  // working set (seed + sub-activities), built each render
+const SEED_BY_ID = {};       // quick lookup
+for (const r of SEED) SEED_BY_ID[r.id] = r;
+
+// data structure: { values: { "rowid:colkey": "value" }, subs: { "subId": {parentId, att, az, createdAt} }, statuses: { "rowid:colkey": "done|late|blocked" } }
+let data = { values: {}, subs: {}, statuses: {} };
+
+let saveTimer = null;
+let pollTimer = null;
+let config = Object.assign({}, DEFAULT_CONFIG);
+let pendingAddSubParent = null;
+let lastSaveAt = 0;       // timestamp ultimo PUT completato con successo
+let saveInProgress = false; // true mentre una PUT è in volo
+const SAVE_GRACE_MS = 8000; // ignora le GET che arrivano entro N ms da un PUT
+
+function setStatus(text, kind) {
+  document.getElementById("status-text").textContent = text;
+  const dot = document.getElementById("status-dot");
+  dot.classList.remove("saving","error");
+  if (kind === "saving") dot.classList.add("saving");
+  if (kind === "error") dot.classList.add("error");
+}
+
+function loadConfig() {
+  try {
+    const raw = localStorage.getItem(CONFIG_KEY);
+    if (raw) {
+      const stored = JSON.parse(raw);
+      config = Object.assign({}, DEFAULT_CONFIG, stored);
+      // If the stored url is empty, restore default
+      if (!config.url) config.url = DEFAULT_CONFIG.url;
+    }
+  } catch(e) {}
+}
+function saveConfig() {
+  config.url = document.getElementById("cfg-url").value.trim() || DEFAULT_CONFIG.url;
+  config.auth = document.getElementById("cfg-auth").value.trim();
+  config.poll = parseInt(document.getElementById("cfg-poll").value, 10);
+  if (isNaN(config.poll)) config.poll = 30;
+  localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+  closeConfig();
+  setupPolling();
+  loadData();
+}
+function openConfig() {
+  document.getElementById("cfg-url").value = config.url;
+  document.getElementById("cfg-auth").value = config.auth;
+  document.getElementById("cfg-poll").value = config.poll;
+  document.getElementById("modal-config").classList.add("open");
+}
+function closeConfig() { document.getElementById("modal-config").classList.remove("open"); }
+
+function buildHeaders() {
+  const h = {"Content-Type": "application/json"};
+  // Disable JSONBin per-request versioning so GET always returns the latest write
+  if (/jsonbin\.io/i.test(config.url || "")) {
+    h["X-Bin-Versioning"] = "false";
+  }
+  // Support multiple headers separated by newlines or ;
+  if (config.auth) {
+    const lines = config.auth.split(/\r?\n|;/);
+    for (const line of lines) {
+      const idx = line.indexOf(":");
+      if (idx > 0) {
+        const name = line.slice(0, idx).trim();
+        const val = line.slice(idx + 1).trim();
+        if (name && val) h[name] = val;
+      }
+    }
+  }
+  return h;
+}
+
+// Normalize payload: accept old flat format or new {values, subs} format
+function normalizePayload(payload) {
+  if (!payload || typeof payload !== "object") return { values: {}, subs: {}, statuses: {} };
+  // New format
+  if (payload.values || payload.subs || payload.statuses) {
+    return {
+      values: payload.values && typeof payload.values === "object" ? payload.values : {},
+      subs: payload.subs && typeof payload.subs === "object" ? payload.subs : {},
+      statuses: payload.statuses && typeof payload.statuses === "object" ? payload.statuses : {}
+    };
+  }
+  // Old format: flat keys like "42:req"
+  const values = {};
+  for (const k in payload) {
+    if (/^\d+:[a-z]+$/i.test(k)) values[k] = payload[k];
+  }
+  return { values, subs: {}, statuses: {} };
+}
+
+async function loadData(opts) {
+  const isPolling = !!(opts && opts.polling);
+  // Race protection: never overwrite local state with remote if we just saved
+  // (the GET could return a stale version due to JSONBin eventual consistency).
+  if (isPolling && (saveInProgress || (Date.now() - lastSaveAt < SAVE_GRACE_MS))) {
+    return; // skip this polling cycle
+  }
+  if (!isPolling) setStatus("Caricamento...", "saving");
+  if (config.url) {
+    try {
+      // Reduce JSONBin CDN cache by appending a cache-buster
+      const sep = config.url.includes("?") ? "&" : "?";
+      const url = config.url + sep + "_=" + Date.now();
+      const res = await fetch(url, { headers: buildHeaders(), cache: "no-store" });
+      if (res.ok) {
+        const json = await res.json();
+        let payload = json;
+        if (payload && typeof payload === "object" && payload.record) payload = payload.record;
+        const remote = normalizePayload(payload);
+        // Final guard: if a save started while this GET was in-flight, discard the GET
+        if (saveInProgress || (Date.now() - lastSaveAt < SAVE_GRACE_MS)) {
+          return;
+        }
+        data = remote;
+        setStatus("Sincronizzato (remoto)", null);
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
+        rebuildAllRows();
+        renderGantt();
+        return;
+      } else {
+        console.warn("Remote returned status:", res.status, "URL:", config.url);
+        if (!isPolling) setStatus("Remoto KO (HTTP " + res.status + ")", "error");
+      }
+    } catch (e) {
+      console.warn("Remote load failed:", e);
+      if (!isPolling) setStatus("Errore rete", "error");
+    }
+  }
+  if (isPolling) return; // on polling failures, don't touch local state
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    data = raw ? normalizePayload(JSON.parse(raw)) : { values: {}, subs: {}, statuses: {} };
+    setStatus(config.url ? "Locale (remoto KO)" : "Sincronizzato (locale)", config.url ? "error" : null);
+  } catch (e) {
+    data = { values: {}, subs: {}, statuses: {} };
+    setStatus("Errore caricamento", "error");
+  }
+  rebuildAllRows();
+  renderGantt();
+}
+
+async function persistData() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    setStatus("Salvataggio...", "saving");
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
+    if (config.url) {
+      saveInProgress = true;
+      try {
+        const res = await fetch(config.url, { method: "PUT", headers: buildHeaders(), body: JSON.stringify(data) });
+        if (res.ok) {
+          lastSaveAt = Date.now();
+          setStatus("Sincronizzato (remoto)", null);
+        } else {
+          console.warn("Save returned status:", res.status);
+          setStatus("Salvataggio KO (HTTP " + res.status + ")", "error");
+        }
+      } catch (e) {
+        console.warn("Save failed:", e);
+        setStatus("Salvato solo localmente", "error");
+      } finally {
+        saveInProgress = false;
+      }
+    } else {
+      setStatus("Sincronizzato (locale)", null);
+    }
+  }, 500);
+}
+
+function setupPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  if (config.url && config.poll > 0) pollTimer = setInterval(() => loadData({polling: true}), config.poll * 1000);
+}
+
+// Build the working `allRows` array by inserting sub-activities right after their parent
+function rebuildAllRows() {
+  const result = [];
+  for (const r of SEED) {
+    result.push(r);
+    // Find subs whose parent is this row, sort by createdAt
+    const childSubs = Object.entries(data.subs)
+      .filter(([sid, sub]) => sub.parentId === r.id)
+      .sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0));
+    for (const [sid, sub] of childSubs) {
+      result.push({
+        id: sid,                  // string id for subs (e.g. "sub_abc123")
+        inc: r.inc, af: r.af, amb: r.amb,
+        att: sub.att,
+        az: sub.az || "",
+        isSub: true,
+        parentId: r.id
+      });
+    }
+  }
+  allRows = result;
+}
+
+function uniqueSorted(arr) { return Array.from(new Set(arr)).sort((a, b) => a.localeCompare(b, 'it')); }
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function countWords(s) { return s.trim() ? s.trim().split(/\s+/).length : 0; }
+
+function populateFilters() {
+  const incs = uniqueSorted(SEED.map(r => r.inc));
+  const afs = uniqueSorted(SEED.map(r => r.af));
+  const ambs = uniqueSorted(SEED.map(r => r.amb));
+  const azs = uniqueSorted(allRows.map(r => r.az).filter(Boolean));
+  const fill = (id, vals, label) => {
+    const sel = document.getElementById(id);
+    const prev = sel.value;
+    sel.innerHTML = `<option value="">${label}</option>` + vals.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+    if (vals.includes(prev)) sel.value = prev;
+  };
+  fill("f-inc", incs, "Tutti Incarichi");
+  fill("f-af", afs, "Tutte Aree Funzionali");
+  fill("f-amb", ambs, "Tutti Ambiti");
+  fill("f-az", azs, "Tutte Aziende");
+}
+
+function getVal(rowId, key) { return data.values[rowId + ":" + key] || ""; }
+function setVal(rowId, key, val) {
+  const k = rowId + ":" + key;
+  if (val) data.values[k] = val; else delete data.values[k];
+  persistData();
+}
+function getStatus(rowId, key) { return data.statuses[rowId + ":" + key] || ""; }
+function setCellStatus(rowId, key, status) {
+  const k = rowId + ":" + key;
+  if (status) data.statuses[k] = status; else delete data.statuses[k];
+  persistData();
+}
+
+function getFilters() {
+  return {
+    inc: document.getElementById("f-inc").value,
+    af: document.getElementById("f-af").value,
+    amb: document.getElementById("f-amb").value,
+    az: document.getElementById("f-az").value,
+    phase: document.getElementById("f-phase").value,
+    search: document.getElementById("f-search").value.trim().toLowerCase()
+  };
+}
+
+function rowMatches(r, f) {
+  if (f.inc && r.inc !== f.inc) return false;
+  if (f.af && r.af !== f.af) return false;
+  if (f.amb && r.amb !== f.amb) return false;
+  if (f.az && r.az !== f.az) return false;
+  if (f.search && !r.att.toLowerCase().includes(f.search)) return false;
+  if (f.phase) {
+    const filled = DATE_PHASES.filter(p => getVal(r.id, p.key)).length;
+    if (f.phase === "any" && filled === 0) return false;
+    if (f.phase === "none" && filled !== 0) return false;
+    if (f.phase === "complete" && filled !== DATE_PHASES.length) return false;
+  }
+  return true;
+}
+
+function renderGantt() {
+  const f = getFilters();
+  // Always include sub-activities of a matched seed-row, even if the sub itself doesn't match phase/search filters
+  // (this avoids losing UI access to subs under a parent the user is viewing)
+  // Strategy: a row passes if it matches OR (it's a sub and its parent matches)
+  const seedMatches = new Set();
+  for (const r of SEED) if (rowMatches(r, f)) seedMatches.add(r.id);
+
+  const filtered = allRows.filter(r => {
+    if (r.isSub) {
+      // Show sub if its parent is in seedMatches, or if the sub itself matches search (within parent's group)
+      if (!seedMatches.has(r.parentId)) return false;
+      // Apply also sub-level filters for date/search to filter unwanted subs
+      // but keep the row attached: simpler — let all subs of matched parents show
+      return true;
+    }
+    return rowMatches(r, f);
+  });
+
+  const body = document.getElementById("gantt-body");
+  if (filtered.length === 0) {
+    body.innerHTML = `<tr><td colspan="16" class="empty-state">Nessuna riga corrisponde ai filtri.</td></tr>`;
+    return;
+  }
+  let html = "";
+  let lastInc = null, lastAf = null, lastAmb = null;
+  let lastSeedId = null;
+  for (const r of filtered) {
+    if (!r.isSub) {
+      if (r.inc !== lastInc) {
+        html += `<tr class="row-inc"><td colspan="16">INCARICO · ${escapeHtml(r.inc)}</td></tr>`;
+        lastInc = r.inc; lastAf = null; lastAmb = null;
+      }
+      if (r.af !== lastAf) {
+        html += `<tr class="row-af"><td colspan="16">${escapeHtml(r.af)}</td></tr>`;
+        lastAf = r.af; lastAmb = null;
+      }
+      if (r.amb !== lastAmb) {
+        html += `<tr class="row-amb"><td colspan="16">${escapeHtml(r.amb)}</td></tr>`;
+        lastAmb = r.amb;
+      }
+    }
+
+    const rowCls = r.isSub ? "row-att row-sub" : "row-att";
+    const subPill = r.isSub ? '<span class="sub-pill">sotto</span>' : '';
+    const delBtn = r.isSub
+      ? `<button class="btn-del-sub" data-sub-id="${r.id}" title="Elimina sotto-attività">×</button>`
+      : '';
+    const attCell = r.isSub
+      ? `<td class="att" title="${escapeHtml(r.att)}">${escapeHtml(r.att)} ${subPill} ${delBtn}</td>`
+      : `<td class="att" title="${escapeHtml(r.att)}">${escapeHtml(r.att)}</td>`;
+    const azCell = r.isSub
+      ? `<td><span class="az-pill" style="background:var(--sub-border);color:#0d4f1f">${escapeHtml(r.az || '—')}</span></td>`
+      : `<td><span class="az-pill">${escapeHtml(r.az || '—')}</span></td>`;
+
+    let cells = "";
+    for (const col of PHASE_COLS) {
+      const v = getVal(r.id, col.key);
+      const has = v ? "has-val" : "";
+      const tdCls = col.kind === "text" || col.kind === "note" ? "text-col" : "";
+      if (col.kind === "date") {
+        const status = getStatus(r.id, col.key); // "", "done", "late", "blocked"
+        const stCls = status ? `st-${status}` : "";
+        cells += `<td class="${stCls}">`
+          + `<div class="cell-stack">`
+          +   `<input class="date-cell ${has}" type="date" value="${escapeHtml(v)}" data-id="${r.id}" data-key="${col.key}" data-kind="date" />`
+          +   `<div class="status-row">`
+          +     `<button class="status-btn done ${status === 'done' ? 'active' : ''}" data-id="${r.id}" data-key="${col.key}" data-status="done" title="Done">D</button>`
+          +     `<button class="status-btn late ${status === 'late' ? 'active' : ''}" data-id="${r.id}" data-key="${col.key}" data-status="late" title="Ritardo">R</button>`
+          +     `<button class="status-btn blocked ${status === 'blocked' ? 'active' : ''}" data-id="${r.id}" data-key="${col.key}" data-status="blocked" title="Blocked">B</button>`
+          +   `</div>`
+          + `</div>`
+          + `</td>`;
+      } else if (col.kind === "text") {
+        cells += `<td class="${tdCls}"><input class="text-cell ${has}" type="text" value="${escapeHtml(v)}" data-id="${r.id}" data-key="${col.key}" data-kind="text" placeholder="—" /></td>`;
+      } else {
+        const wc = countWords(v);
+        const overClass = wc > NOTE_MAX_WORDS ? "over" : "";
+        cells += `<td class="${tdCls}">`
+          + `<textarea class="note-cell ${has}" rows="1" data-id="${r.id}" data-key="${col.key}" data-kind="note" placeholder="—">${escapeHtml(v)}</textarea>`
+          + `<div class="note-counter ${overClass}"><span class="wc">${wc}</span>/${NOTE_MAX_WORDS} parole</div>`
+          + `</td>`;
+      }
+    }
+
+    html += `<tr class="${rowCls}" data-rid="${r.id}">`
+      + `<td></td><td></td><td></td>`
+      + attCell + azCell
+      + cells + `</tr>`;
+
+    if (!r.isSub) lastSeedId = r.id;
+
+    // After all subs of a seed (or right after a seed with no subs), add the "Add sub-activity" action row
+    // Strategy: emit the add-button row after the LAST item that belongs to this seed-row group.
+    // We detect this by looking at the next item in filtered.
+    const idxInFiltered = filtered.indexOf(r);
+    const next = filtered[idxInFiltered + 1];
+    const isLastOfGroup = !next || (!next.isSub) || (next.parentId !== lastSeedId);
+    if (isLastOfGroup && lastSeedId != null) {
+      html += `<tr class="row-add-sub"><td colspan="16"><button class="btn-add-sub" data-parent-id="${lastSeedId}">+ Aggiungi sotto-attività</button></td></tr>`;
+    }
+  }
+  body.innerHTML = html;
+
+  // Bind inputs
+  body.querySelectorAll("input.date-cell, input.text-cell").forEach(inp => {
+    inp.addEventListener("change", e => {
+      const id = e.target.dataset.id;
+      const key = e.target.dataset.key;
+      const numId = isNaN(+id) ? id : +id;
+      setVal(numId, key, e.target.value);
+      e.target.classList.toggle("has-val", !!e.target.value);
+    });
+  });
+  body.querySelectorAll("textarea.note-cell").forEach(ta => {
+    const counter = ta.parentElement.querySelector(".note-counter");
+    const wcSpan = counter.querySelector(".wc");
+    const updateCounter = () => {
+      const wc = countWords(ta.value);
+      wcSpan.textContent = wc;
+      counter.classList.toggle("over", wc > NOTE_MAX_WORDS);
+    };
+    ta.addEventListener("input", updateCounter);
+    ta.addEventListener("blur", e => {
+      let val = e.target.value;
+      const words = val.trim().split(/\s+/);
+      if (val.trim() && words.length > NOTE_MAX_WORDS) {
+        val = words.slice(0, NOTE_MAX_WORDS).join(" ");
+        e.target.value = val;
+        updateCounter();
+        alert(`Nota troncata a ${NOTE_MAX_WORDS} parole (limite massimo).`);
+      }
+      const id = e.target.dataset.id;
+      const key = e.target.dataset.key;
+      const numId = isNaN(+id) ? id : +id;
+      setVal(numId, key, val);
+      e.target.classList.toggle("has-val", !!val);
+    });
+  });
+
+  // Bind status flag buttons (Done / Ritardo / Blocked) on date cells
+  body.querySelectorAll(".status-btn").forEach(btn => {
+    btn.addEventListener("click", e => {
+      const id = e.target.dataset.id;
+      const key = e.target.dataset.key;
+      const newStatus = e.target.dataset.status;
+      const numId = isNaN(+id) ? id : +id;
+      const current = getStatus(numId, key);
+      // Toggle: clicking the active one clears it; otherwise switch to the clicked status
+      const toSet = current === newStatus ? "" : newStatus;
+      setCellStatus(numId, key, toSet);
+
+      // Update the 3 buttons of this cell + the parent td background
+      const cellStack = e.target.closest(".cell-stack");
+      const td = e.target.closest("td");
+      if (cellStack) {
+        cellStack.querySelectorAll(".status-btn").forEach(b => {
+          const isActive = !!toSet && b.dataset.status === toSet;
+          b.classList.toggle("active", isActive);
+        });
+      }
+      if (td) {
+        td.classList.remove("st-done", "st-late", "st-blocked");
+        if (toSet) td.classList.add("st-" + toSet);
+      }
+    });
+  });
+
+  // Bind add-sub buttons
+  body.querySelectorAll(".btn-add-sub").forEach(btn => {
+    btn.addEventListener("click", e => {
+      const pid = +e.target.dataset.parentId;
+      openAddSub(pid);
+    });
+  });
+  body.querySelectorAll(".btn-del-sub").forEach(btn => {
+    btn.addEventListener("click", e => {
+      e.stopPropagation();
+      const sid = e.target.dataset.subId;
+      if (confirm("Eliminare questa sotto-attività e tutti i suoi dati (date, note, ecc.)?")) {
+        deleteSubActivity(sid);
+      }
+    });
+  });
+}
+
+function openAddSub(parentId) {
+  pendingAddSubParent = parentId;
+  const parent = SEED_BY_ID[parentId];
+  if (!parent) return;
+  document.getElementById("add-sub-context").innerHTML =
+    `Sotto: <strong>${escapeHtml(parent.amb)}</strong><br>`
+    + `<span style="color:var(--text-3);font-size:11px">${escapeHtml(parent.att)}</span>`;
+  document.getElementById("sub-att").value = "";
+  document.getElementById("sub-az").value = "";
+  document.getElementById("modal-add-sub").classList.add("open");
+  setTimeout(() => document.getElementById("sub-att").focus(), 50);
+}
+function closeAddSub() {
+  document.getElementById("modal-add-sub").classList.remove("open");
+  pendingAddSubParent = null;
+}
+function confirmAddSub() {
+  const attText = document.getElementById("sub-att").value.trim();
+  const azText = document.getElementById("sub-az").value.trim();
+  if (!attText) { alert("Inserisci la descrizione della sotto-attività."); return; }
+  if (pendingAddSubParent == null) { closeAddSub(); return; }
+
+  const subId = "sub_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 7);
+  data.subs[subId] = {
+    parentId: pendingAddSubParent,
+    att: attText,
+    az: azText,
+    createdAt: Date.now()
+  };
+  persistData();
+  closeAddSub();
+  rebuildAllRows();
+  populateFilters();
+  renderGantt();
+}
+
+function deleteSubActivity(subId) {
+  if (!data.subs[subId]) return;
+  delete data.subs[subId];
+  // Also remove any associated values and statuses
+  for (const k in data.values) {
+    if (k.startsWith(subId + ":")) delete data.values[k];
+  }
+  for (const k in data.statuses) {
+    if (k.startsWith(subId + ":")) delete data.statuses[k];
+  }
+  persistData();
+  rebuildAllRows();
+  populateFilters();
+  renderGantt();
+}
+
+function computeStats(rows) {
+  const totalCells = rows.length * DATE_PHASES.length;
+  let filled = 0, completed = 0, started = 0;
+  for (const r of rows) {
+    let f = 0;
+    for (const p of DATE_PHASES) if (getVal(r.id, p.key)) f++;
+    filled += f;
+    if (f === DATE_PHASES.length) completed++;
+    if (f > 0) started++;
+  }
+  return { totalRows: rows.length, totalCells, filled, completed, started };
+}
+
+// ---- KPI Visualizations ----
+const chartInstances = {};
+
+function rowIsCompleted(r) {
+  // "Completata" = tutte le date di fase sono compilate
+  for (const p of DATE_PHASES) if (!getVal(r.id, p.key)) return false;
+  return true;
+}
+function rowIsStarted(r) {
+  for (const p of DATE_PHASES) if (getVal(r.id, p.key)) return true;
+  return false;
+}
+
+// Workload per Azienda: numero di attività assegnate (incluse sotto-attività)
+function workloadByAzienda(rows) {
+  const counts = {};
+  for (const r of rows) {
+    const az = r.az || "Non assegnata";
+    if (!counts[az]) counts[az] = { total: 0, completed: 0, started: 0 };
+    counts[az].total++;
+    if (rowIsCompleted(r)) counts[az].completed++;
+    else if (rowIsStarted(r)) counts[az].started++;
+  }
+  return Object.entries(counts)
+    .map(([name, v]) => ({ name, ...v, notStarted: v.total - v.started - v.completed }))
+    .sort((a, b) => b.total - a.total);
+}
+
+// Consegne per mese: data Prod aggregata per anno-mese
+function deliveriesByMonth(rows) {
+  const months = {};
+  for (const r of rows) {
+    const prodDate = getVal(r.id, "prod");
+    if (!prodDate) continue;
+    const ym = prodDate.slice(0, 7); // "YYYY-MM"
+    if (!months[ym]) months[ym] = 0;
+    months[ym]++;
+  }
+  const keys = Object.keys(months).sort();
+  if (keys.length === 0) return { labels: [], values: [], total: 0 };
+  // Fill gaps between min and max so the timeline is continuous
+  const [minY, minM] = keys[0].split("-").map(Number);
+  const [maxY, maxM] = keys[keys.length - 1].split("-").map(Number);
+  const labels = [], values = [];
+  let y = minY, m = minM;
+  const monthNames = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
+  while (y < maxY || (y === maxY && m <= maxM)) {
+    const key = `${y}-${String(m).padStart(2, "0")}`;
+    labels.push(`${monthNames[m - 1]} ${String(y).slice(2)}`);
+    values.push(months[key] || 0);
+    m++;
+    if (m > 12) { m = 1; y++; }
+  }
+  const total = values.reduce((a, b) => a + b, 0);
+  return { labels, values, total };
+}
+
+// Avanzamento per Incarico: numero di attività completate / totali
+function progressByIncarico(rows) {
+  const g = {};
+  for (const r of rows) {
+    const k = r.inc;
+    if (!g[k]) g[k] = { name: k, total: 0, completed: 0, started: 0 };
+    g[k].total++;
+    if (rowIsCompleted(r)) g[k].completed++;
+    else if (rowIsStarted(r)) g[k].started++;
+  }
+  return Object.values(g)
+    .map(d => ({ ...d, pct: d.total ? Math.round(d.completed / d.total * 100) : 0 }))
+    .sort((a, b) => b.total - a.total);
+}
+
+// Color palette tied to Aziende (consistent across charts)
+const AZIENDA_COLORS = {
+  "B.C.": "#1f6feb",
+  "CAMELOT": "#1a7f37",
+  "Elite/Digital360": "#9a6700",
+  "ENG": "#cf222e",
+  "ENG (sub INNOVAWAY)": "#a83d9d",
+  "Non assegnata": "#8c959f"
+};
+function azColor(name) { return AZIENDA_COLORS[name] || "#57606a"; }
+
+function destroyChart(id) {
+  if (chartInstances[id]) { chartInstances[id].destroy(); delete chartInstances[id]; }
+}
+
+function renderWorkloadChart(canvasId, rows) {
+  const data = workloadByAzienda(rows);
+  destroyChart(canvasId);
+  const ctx = document.getElementById(canvasId);
+  if (!ctx || typeof Chart === "undefined") return data;
+  chartInstances[canvasId] = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: data.map(d => d.name),
+      datasets: [
+        {
+          label: "Da avviare",
+          data: data.map(d => d.notStarted),
+          backgroundColor: "#d0d7de",
+          stack: "s1"
+        },
+        {
+          label: "In corso",
+          data: data.map(d => d.started),
+          backgroundColor: "#9a6700",
+          stack: "s1"
+        },
+        {
+          label: "Completate",
+          data: data.map(d => d.completed),
+          backgroundColor: "#1a7f37",
+          stack: "s1"
+        }
+      ]
+    },
+    options: {
+      indexAxis: "y",
+      maintainAspectRatio: false,
+      responsive: true,
+      plugins: {
+        legend: { position: "bottom", labels: { font: { size: 10 }, boxWidth: 12, padding: 8 } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.x}`
+          }
+        }
+      },
+      scales: {
+        x: { stacked: true, ticks: { font: { size: 10 }, precision: 0 }, grid: { color: "#eef2f7" } },
+        y: { stacked: true, ticks: { font: { size: 10 } }, grid: { display: false } }
+      }
+    }
+  });
+  return data;
+}
+
+function renderDeliveriesChart(canvasId, rows) {
+  const data = deliveriesByMonth(rows);
+  destroyChart(canvasId);
+  const ctx = document.getElementById(canvasId);
+  if (!ctx || typeof Chart === "undefined") return data;
+  chartInstances[canvasId] = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: data.labels,
+      datasets: [{
+        label: "Consegne (Prod)",
+        data: data.values,
+        backgroundColor: "#1f6feb",
+        borderRadius: 4
+      }]
+    },
+    options: {
+      maintainAspectRatio: false,
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: { label: (ctx) => `${ctx.parsed.y} consegna/e` }
+        }
+      },
+      scales: {
+        x: { ticks: { font: { size: 10 } }, grid: { display: false } },
+        y: { ticks: { font: { size: 10 }, precision: 0 }, grid: { color: "#eef2f7" }, beginAtZero: true }
+      }
+    }
+  });
+  return data;
+}
+
+function renderProgressByIncarico(containerId, rows) {
+  const data = progressByIncarico(rows);
+  const el = document.getElementById(containerId);
+  if (!el) return data;
+  if (data.length === 0) {
+    el.innerHTML = `<div style="color:var(--text-3);font-size:12px;text-align:center;padding:20px">Nessun incarico in vista</div>`;
+    return data;
+  }
+  el.innerHTML = data.map(d => {
+    const completedPct = d.total ? (d.completed / d.total * 100) : 0;
+    const startedPct = d.total ? (d.started / d.total * 100) : 0;
+    return `
+      <div class="prog-row">
+        <div class="prog-label">
+          <span class="name">${escapeHtml(d.name)}</span>
+          <span class="count">${d.completed}/${d.total} · ${d.pct}%</span>
+        </div>
+        <div class="prog-bar" title="Completate: ${d.completed} · In corso: ${d.started} · Da avviare: ${d.total - d.completed - d.started}">
+          <div class="prog-bar-fill" style="width:${completedPct}%"></div>
+          <div class="prog-bar-fill partial" style="width:${startedPct}%;position:absolute;left:${completedPct}%;top:0"></div>
+        </div>
+      </div>`;
+  }).join("");
+  return data;
+}
+
+function groupStats(field) {
+  const g = {};
+  for (const r of allRows) {
+    const k = r[field] || "—";
+    if (!g[k]) g[k] = { rows: 0, completed: 0, started: 0, done: 0, late: 0, blocked: 0 };
+    g[k].rows++;
+    if (rowIsCompleted(r)) g[k].completed++;
+    else if (rowIsStarted(r)) g[k].started++;
+    // Aggregate status flags across all date phase cells of this row
+    for (const p of DATE_PHASES) {
+      const st = getStatus(r.id, p.key);
+      if (st === "done") g[k].done++;
+      else if (st === "late") g[k].late++;
+      else if (st === "blocked") g[k].blocked++;
+    }
+  }
+  return Object.entries(g).map(([k, v]) => ({
+    name: k, rows: v.rows, started: v.started, completed: v.completed,
+    done: v.done, late: v.late, blocked: v.blocked,
+    pct: v.rows ? Math.round(v.completed / v.rows * 100) : 0
+  })).sort((a, b) => b.pct - a.pct);
+}
+
+function phaseStats() {
+  // For each phase: count tasks that have the phase's date compiled, and status flags
+  const g = DATE_PHASES.map(p => ({ name: p.name, key: p.key, filled: 0, done: 0, late: 0, blocked: 0 }));
+  for (const r of allRows) {
+    for (let i = 0; i < DATE_PHASES.length; i++) {
+      const k = DATE_PHASES[i].key;
+      if (getVal(r.id, k)) g[i].filled++;
+      const st = getStatus(r.id, k);
+      if (st === "done") g[i].done++;
+      else if (st === "late") g[i].late++;
+      else if (st === "blocked") g[i].blocked++;
+    }
+  }
+  return g.map(p => ({ ...p, total: allRows.length, pct: allRows.length ? Math.round(p.filled / allRows.length * 100) : 0 }));
+}
+
+function statusBadges(d) {
+  // Returns HTML with 3 small pills (only shown if > 0)
+  const parts = [];
+  if (d.done) parts.push(`<span class="st-pill st-done-pill" title="Done">D ${d.done}</span>`);
+  if (d.late) parts.push(`<span class="st-pill st-late-pill" title="Ritardo">R ${d.late}</span>`);
+  if (d.blocked) parts.push(`<span class="st-pill st-blocked-pill" title="Blocked">B ${d.blocked}</span>`);
+  return parts.length ? parts.join(" ") : `<span style="color:var(--text-3);font-size:10px">—</span>`;
+}
+
+function renderReportTable(containerId, dataArr, nameLabel) {
+  const rows = dataArr.map(d => `
+    <tr><td>${escapeHtml(d.name)}</td>
+      <td class="num">${d.rows}</td>
+      <td class="num">${d.started}</td>
+      <td class="num">${d.completed}</td>
+      <td>${statusBadges(d)}</td>
+      <td style="width:140px"><div class="progress-bar"><div class="progress-bar-fill" style="width:${d.pct}%"></div></div></td>
+      <td class="num" style="width:50px">${d.pct}%</td></tr>`).join("");
+  document.getElementById(containerId).innerHTML = `
+    <table class="report-table">
+      <thead><tr><th>${escapeHtml(nameLabel)}</th><th class="num">Task totali</th><th class="num">In corso</th><th class="num">Completati</th><th>Stati celle</th><th>Avanzamento</th><th class="num">%</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="7" class="empty-state">Nessun dato</td></tr>`}</tbody>
+    </table>`;
+}
+
+function renderPhaseTable(containerId) {
+  const arr = phaseStats();
+  const rows = arr.map(d => `
+    <tr><td>${escapeHtml(d.name)}</td>
+      <td class="num">${d.filled}/${d.total}</td>
+      <td>${statusBadges(d)}</td>
+      <td style="width:140px"><div class="progress-bar"><div class="progress-bar-fill" style="width:${d.pct}%"></div></div></td>
+      <td class="num" style="width:50px">${d.pct}%</td></tr>`).join("");
+  document.getElementById(containerId).innerHTML = `
+    <table class="report-table">
+      <thead><tr><th>Fase</th><th class="num">Task con data</th><th>Stati celle</th><th>Avanzamento</th><th class="num">%</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderReport() {
+  // Same KPI visualizations on the full set
+  const wk = renderWorkloadChart("chart-workload-full", allRows);
+  const dl = renderDeliveriesChart("chart-deliveries-full", allRows);
+  const inc = renderProgressByIncarico("progress-incarichi-full", allRows);
+
+  const tot = wk.reduce((a, d) => a + d.total, 0);
+  const completed = wk.reduce((a, d) => a + d.completed, 0);
+  document.getElementById("workload-full-summary").textContent =
+    `${tot} attività su ${wk.length} aziend${wk.length === 1 ? "a" : "e"} · ${completed} completate`;
+  document.getElementById("deliveries-full-summary").textContent =
+    dl.total === 0 ? "Nessuna consegna pianificata" : `${dl.total} consegne pianificate (Prod)`;
+  const incCompleted = inc.reduce((a, d) => a + d.completed, 0);
+  const incTotal = inc.reduce((a, d) => a + d.total, 0);
+  document.getElementById("incarichi-full-summary").textContent =
+    `${incCompleted}/${incTotal} attività completate · ${inc.length} incarichi`;
+
+  renderReportTable("rep-af", groupStats("af"), "Area Funzionale");
+  renderPhaseTable("rep-phase");
+}
+
+function csvEsc(v) { v = String(v == null ? "" : v); return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; }
+
+function exportCSV() {
+  const f = getFilters();
+  const seedMatches = new Set();
+  for (const r of SEED) if (rowMatches(r, f)) seedMatches.add(r.id);
+  const filtered = allRows.filter(r => r.isSub ? seedMatches.has(r.parentId) : rowMatches(r, f));
+  // Build header: for each phase column, add the column itself; for date phases, add a Status column too
+  const header = ["Tipo", "Incarico", "Area Funzionale", "Ambito", "Attività", "Azienda"];
+  for (const p of PHASE_COLS) {
+    header.push(p.name);
+    if (p.kind === "date") header.push(`${p.name} - Stato`);
+  }
+  const lines = [header.map(csvEsc).join(",")];
+  const STATUS_LABEL = { done: "Done", late: "Ritardo", blocked: "Blocked" };
+  for (const r of filtered) {
+    const tipo = r.isSub ? "Sotto-attività" : "Attività";
+    const row = [tipo, r.inc, r.af, r.amb, r.att, r.az];
+    for (const p of PHASE_COLS) {
+      row.push(getVal(r.id, p.key));
+      if (p.kind === "date") row.push(STATUS_LABEL[getStatus(r.id, p.key)] || "");
+    }
+    lines.push(row.map(csvEsc).join(","));
+  }
+  const blob = new Blob(["\ufeff" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "piano_gantt_L1_2026_export.csv";
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+}
+
+function debounce(fn, ms) {
+  let t;
+  return function () { const a = arguments; clearTimeout(t); t = setTimeout(() => fn.apply(null, a), ms); };
+}
+
+function wireEvents() {
+  ["f-inc", "f-af", "f-amb", "f-az", "f-phase"].forEach(id => {
+    document.getElementById(id).addEventListener("change", renderGantt);
+  });
+  document.getElementById("f-search").addEventListener("input", debounce(renderGantt, 200));
+  document.getElementById("btn-reset").addEventListener("click", () => {
+    ["f-inc", "f-af", "f-amb", "f-az", "f-phase", "f-search"].forEach(id => document.getElementById(id).value = "");
+    renderGantt();
+  });
+  document.getElementById("btn-export").addEventListener("click", exportCSV);
+  document.getElementById("btn-reload").addEventListener("click", loadData);
+  document.querySelectorAll(".tab").forEach(t => {
+    t.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+      t.classList.add("active");
+      const which = t.dataset.tab;
+      document.getElementById("tab-gantt").style.display = which === "gantt" ? "" : "none";
+      document.getElementById("tab-report").style.display = which === "report" ? "" : "none";
+      if (which === "report") renderReport();
+    });
+  });
+}
+
+(async function init() {
+  loadConfig();
+  rebuildAllRows();
+  populateFilters();
+  wireEvents();
+  await loadData();
+  setupPolling();
+})();
+</script>
+</body>
+</html>
