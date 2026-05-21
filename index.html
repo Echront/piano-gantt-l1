@@ -527,10 +527,21 @@ async function loadData(opts) {
   if (!isPolling) setStatus("Caricamento...", "saving");
   if (config.url) {
     try {
-      const sep = config.url.includes("?") ? "&" : "?";
-      const url = config.url + sep + "_=" + Date.now();
-      console.log("[Sync] GET" + (isPolling ? " (polling)" : "") + " →", url);
-      const res = await fetch(url, { headers: buildHeaders("GET"), cache: "no-store" });
+      // JSONBin: usa l'endpoint /latest che è meno aggressivamente cached del base
+      const isJsonBin = /jsonbin\.io/i.test(config.url);
+      let fetchUrl = config.url;
+      if (isJsonBin && !/\/latest(\?|$)/.test(fetchUrl)) {
+        // Append /latest before any query string
+        fetchUrl = fetchUrl.replace(/(\?.*)?$/, "/latest$1");
+      }
+      const sep = fetchUrl.includes("?") ? "&" : "?";
+      fetchUrl = fetchUrl + sep + "_=" + Date.now();
+      console.log("[Sync] GET" + (isPolling ? " (polling)" : "") + " →", fetchUrl);
+      const getHeaders = buildHeaders("GET");
+      // Header HTTP anti-cache aggressivi
+      getHeaders["Cache-Control"] = "no-cache, no-store, must-revalidate";
+      getHeaders["Pragma"] = "no-cache";
+      const res = await fetch(fetchUrl, { headers: getHeaders, cache: "no-store" });
       console.log("[Sync] GET response status:", res.status);
       if (res.ok) {
         const json = await res.json();
@@ -553,7 +564,30 @@ async function loadData(opts) {
           }
           return;
         }
-        // Caricamento manuale (init o pulsante Ricarica): sovrascrive con merge dirty
+        // Caricamento manuale (init o pulsante Ricarica)
+        // Protezione "cache stale al refresh": se il remote ha STRETTAMENTE MENO dati del locale
+        // (alcune chiavi locali non sono presenti nel remote), il remote è probabilmente una
+        // versione vecchia (cache CDN di JSONBin). In quel caso conserva il locale e ri-pusha al server.
+        const localSubsCount = Object.keys(data.subs || {}).length;
+        const remoteSubsCount = Object.keys(remote.subs || {}).length;
+        const localValuesCount = Object.keys(data.values || {}).length;
+        const remoteValuesCount = Object.keys(remote.values || {}).length;
+        const localStatusesCount = Object.keys(data.statuses || {}).length;
+        const remoteStatusesCount = Object.keys(remote.statuses || {}).length;
+        const localHasMore = (localSubsCount > remoteSubsCount) ||
+                             (localValuesCount > remoteValuesCount) ||
+                             (localStatusesCount > remoteStatusesCount);
+        if (localHasMore) {
+          console.warn("[Sync] Remote sembra essere una versione cached vecchia "
+            + "(local: " + localSubsCount + " subs, " + localValuesCount + " values, " + localStatusesCount + " statuses; "
+            + "remote: " + remoteSubsCount + " subs, " + remoteValuesCount + " values, " + remoteStatusesCount + " statuses). "
+            + "Mantengo i dati locali e ri-pusho al server.");
+          setStatus("Sincronizzato (locale più recente)", "warn");
+          // Ripusha il locale al server per coerenza
+          persistData();
+          return;
+        }
+        // Caso normale: il remote è almeno aggiornato come il locale → merge preservando dirty
         data = mergePreservingDirty(remote, data, dirtyKeys);
         setStatus("Sincronizzato (remoto)", null);
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
@@ -1321,6 +1355,19 @@ function wireEvents() {
 
 (async function init() {
   loadConfig();
+  // Pre-carica dallo localStorage SUBITO, prima di tentare il fetch remoto.
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      data = normalizePayload(JSON.parse(raw));
+      console.log("[Sync] Pre-loaded from localStorage:",
+        Object.keys(data.subs).length, "subs,",
+        Object.keys(data.values).length, "values,",
+        Object.keys(data.statuses).length, "statuses");
+    } else {
+      console.log("[Sync] localStorage vuoto, attendo fetch remoto");
+    }
+  } catch(e) { console.warn("[Sync] Pre-load localStorage failed:", e); }
   rebuildAllRows();
   populateFilters();
   wireEvents();
