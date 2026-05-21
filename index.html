@@ -311,7 +311,7 @@ td.st-blocked { background: #fde5e7 !important; }
       <strong>Sync attiva:</strong> i dati vengono salvati automaticamente nel bin condiviso del team. Le modifiche sono visibili agli altri utenti dopo aver premuto il pulsante ⟳ Ricarica.
     </div>
     <label>URL Endpoint sync (avanzato — modificare solo se richiesto)</label>
-    <input type="url" id="cfg-url" placeholder="https://jsonblob.com/api/jsonBlob/XXXXX" />
+    <input type="url" id="cfg-url" placeholder="https://api.jsonbin.io/v3/b/XXXXX" />
     <label>Header autenticazione aggiuntivi (opzionale, raro)</label>
     <input type="text" id="cfg-auth" placeholder="lascia vuoto a meno di indicazioni specifiche" />
     <label>Intervallo polling (secondi, 0 = disabilitato)</label>
@@ -366,11 +366,13 @@ const NOTE_MAX_WORDS = 100;
 const STORAGE_KEY = "gantt_l1_2026_data_v3";
 const CONFIG_KEY = "gantt_l1_2026_config";
 
-// Configurazione preimpostata: bin JSONBlob condiviso del team.
-// JSONBlob non richiede autenticazione e supporta CORS aperto su GET/PUT.
-// Chi conosce l'URL può leggere e scrivere — sufficiente per un team interno.
+// Configurazione preimpostata: bin JSONBin condiviso del team + Access Keys con scope su questo singolo bin.
+// La chiave "read" è usata per le GET, la chiave "write" per PUT/DELETE.
+// Anche se l'URL del tool venisse condiviso oltre il team previsto, le chiavi danno accesso solo a questo bin.
 const DEFAULT_CONFIG = {
-  url: "https://jsonblob.com/api/jsonBlob/019e4968-01e2-76a9-b8cc-d951f8feeccb",
+  url: "https://api.jsonbin.io/v3/b/6a0dc36a6610dd3ae877dbd8",
+  readKey: "$2a$10$apeOaRtjXmfCmVh1jIRCeuCQhazoZRI4TCLcc6XKvspqtFYYpl19W",
+  writeKey: "$2a$10$DeCSIv6wr4E7zIEot8GSv.n0B1A8aoCsj9lKo9cm.GWlHMbqZnXTa",
   auth: "",
   poll: 30
 };
@@ -414,9 +416,10 @@ function loadConfig() {
     if (raw) {
       const stored = JSON.parse(raw);
       config = Object.assign({}, DEFAULT_CONFIG, stored);
-      // Rimuovi chiavi residue da configurazioni vecchie (JSONBin)
-      delete config.readKey;
-      delete config.writeKey;
+      // Le chiavi di accesso sono hardcoded: ripristina sempre i valori default
+      // (anche se localStorage contiene una vecchia versione senza chiavi)
+      config.readKey = DEFAULT_CONFIG.readKey;
+      config.writeKey = DEFAULT_CONFIG.writeKey;
       if (!config.url) config.url = DEFAULT_CONFIG.url;
     }
   } catch(e) {}
@@ -426,6 +429,9 @@ function saveConfig() {
   config.auth = document.getElementById("cfg-auth").value.trim();
   config.poll = parseInt(document.getElementById("cfg-poll").value, 10);
   if (isNaN(config.poll)) config.poll = 30;
+  // Le chiavi restano quelle hardcoded
+  config.readKey = DEFAULT_CONFIG.readKey;
+  config.writeKey = DEFAULT_CONFIG.writeKey;
   localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
   closeConfig();
   setupPolling();
@@ -441,7 +447,17 @@ function closeConfig() { document.getElementById("modal-config").classList.remov
 
 function buildHeaders(method) {
   const h = {"Content-Type": "application/json"};
-  // Header autenticazione custom opzionali (raro, npoint.io non li richiede)
+  const isJsonBin = /jsonbin\.io/i.test(config.url || "");
+  if (isJsonBin) {
+    h["X-Bin-Versioning"] = "false";
+    if (method === "GET" && config.readKey) {
+      h["X-Access-Key"] = config.readKey;
+    } else if ((method === "PUT" || method === "DELETE") && config.writeKey) {
+      h["X-Access-Key"] = config.writeKey;
+    } else if (config.writeKey) {
+      h["X-Access-Key"] = config.writeKey;
+    }
+  }
   if (config.auth) {
     const lines = config.auth.split(/\r?\n|;/);
     for (const line of lines) {
