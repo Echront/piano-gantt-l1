@@ -311,7 +311,7 @@ td.st-blocked { background: #fde5e7 !important; }
       <strong>Sync attiva:</strong> i dati vengono salvati automaticamente nel bin condiviso del team. Le modifiche sono visibili agli altri utenti dopo aver premuto il pulsante ⟳ Ricarica.
     </div>
     <label>URL Endpoint sync (avanzato — modificare solo se richiesto)</label>
-    <input type="url" id="cfg-url" placeholder="https://api.npoint.io/XXXXX" />
+    <input type="url" id="cfg-url" placeholder="https://jsonblob.com/api/jsonBlob/XXXXX" />
     <label>Header autenticazione aggiuntivi (opzionale, raro)</label>
     <input type="text" id="cfg-auth" placeholder="lascia vuoto a meno di indicazioni specifiche" />
     <label>Intervallo polling (secondi, 0 = disabilitato)</label>
@@ -366,12 +366,12 @@ const NOTE_MAX_WORDS = 100;
 const STORAGE_KEY = "gantt_l1_2026_data_v3";
 const CONFIG_KEY = "gantt_l1_2026_config";
 
-// Configurazione preimpostata: bin npoint.io condiviso del team.
-// npoint.io non richiede autenticazione: chi conosce l'URL può leggere e scrivere.
-// Sufficiente per un team interno fidato.
+// Configurazione preimpostata: bin JSONBlob condiviso del team.
+// JSONBlob non richiede autenticazione e supporta CORS aperto su GET/PUT.
+// Chi conosce l'URL può leggere e scrivere — sufficiente per un team interno.
 const DEFAULT_CONFIG = {
-  url: "https://api.npoint.io/2d44df43f6ca7d22d2dc",
-  auth: "", // header custom opzionale (non serve per npoint)
+  url: "https://jsonblob.com/api/jsonBlob/019e4968-01e2-76a9-b8cc-d951f8feeccb",
+  auth: "",
   poll: 30
 };
 
@@ -513,7 +513,9 @@ async function loadData(opts) {
     try {
       const sep = config.url.includes("?") ? "&" : "?";
       const url = config.url + sep + "_=" + Date.now();
+      console.log("[Sync] GET" + (isPolling ? " (polling)" : "") + " →", url);
       const res = await fetch(url, { headers: buildHeaders("GET"), cache: "no-store" });
+      console.log("[Sync] GET response status:", res.status);
       if (res.ok) {
         const json = await res.json();
         let payload = json;
@@ -566,33 +568,35 @@ async function loadData(opts) {
 
 async function persistData() {
   if (saveTimer) clearTimeout(saveTimer);
-  // Block any polling overwrite from the moment a save is scheduled,
-  // not only when the PUT is in flight. This prevents a polling GET that
-  // started before our PUT from clobbering newly added data.
   saveInProgress = true;
   lastSaveAt = Date.now();
   saveTimer = setTimeout(async () => {
     setStatus("Salvataggio...", "saving");
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
+    console.log("[Sync] persistData fired, config.url =", config.url);
     if (config.url) {
       try {
+        console.log("[Sync] PUT →", config.url);
         const res = await fetch(config.url, { method: "PUT", headers: buildHeaders("PUT"), body: JSON.stringify(data) });
+        console.log("[Sync] PUT response status:", res.status, res.statusText);
         if (res.ok) {
           lastSaveAt = Date.now();
-          dirtyKeys.clear(); // server ha confermato, nessuna chiave più "in attesa"
+          dirtyKeys.clear();
           setStatus("Sincronizzato (remoto)", null);
         } else {
-          console.warn("Save returned status:", res.status);
+          const txt = await res.text().catch(() => "");
+          console.warn("[Sync] Save returned status:", res.status, "body:", txt);
           setStatus("Salvataggio KO (HTTP " + res.status + ")", "error");
         }
       } catch (e) {
-        console.warn("Save failed:", e);
-        setStatus("Salvato solo localmente", "error");
+        console.warn("[Sync] Save failed:", e);
+        setStatus("Salvato solo localmente — " + (e.message || "rete"), "error");
       } finally {
         saveInProgress = false;
       }
     } else {
       saveInProgress = false;
+      console.warn("[Sync] config.url vuoto, salvataggio solo locale");
       setStatus("Sincronizzato (locale)", null);
     }
   }, 500);
